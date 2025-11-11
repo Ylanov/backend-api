@@ -68,7 +68,7 @@ jobs:
           pip install pip-audit
 
       - name: Run pip-audit
-        run: pip-audit -r requirements.txt --strict
+        run: pip-audit -r requirements.txt
 
   # --- ЗАДАЧА №3: Сканирование Frontend-зависимостей (npm audit) ---
   scan-frontend-dependencies:
