@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pyro-api
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack      # важно: чтобы Prometheus его подхватил
+spec:
+  selector:
+    matchLabels:
+      app: pyro-api               # метка из Service pyro-api
+  namespaceSelector:
+    matchNames:
+      - default                   # namespace, где живёт pyro-api
+  endpoints:
+    - port: http                  # имя порта из service.yaml
+      path: /metrics
+      interval: 15s

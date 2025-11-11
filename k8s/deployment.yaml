@@ -29,7 +29,7 @@ spec:
 
       containers:
         - name: pyro-api
-          image: ghcr.io/ylanov/pyro-api:2.0.612
+          image: ghcr.io/ylanov/pyro-api:2.0.614
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

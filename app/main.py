@@ -1,4 +1,3 @@
-# app/main.py
 from __future__ import annotations
 
 import logging
@@ -9,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.settings import settings
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -30,20 +31,15 @@ UPLOAD_DIR = settings.UPLOAD_DIR
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
 
-
 # ------------------------------------------------------------
 # Приложение
 # ------------------------------------------------------------
-# --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-# Явно указываем пути для документации с префиксом /api
 app = FastAPI(
     title="Pyro API - Swagger UI",
     openapi_url="/api/openapi.json",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
 )
-# --- КОНЕЦ ИЗМЕНЕНИЯ ---
-
 
 # --- Middleware ---
 app.add_middleware(SecurityHeadersMiddleware)
@@ -72,7 +68,7 @@ api_router.include_router(reports_api.router)
 api_router.include_router(logs_api.router)
 
 
-# --- Системные эндпоинты (теперь тоже часть api_router) ---
+# --- Системные эндпоинты ---
 @api_router.get("/healthz")
 async def healthz() -> dict:
     return {"status": "ok"}
@@ -81,25 +77,55 @@ async def healthz() -> dict:
 # --- Подключаем главный роутер к приложению ---
 app.include_router(api_router)
 
-
-# --- Статические файлы (остаются в корне) ---
+# --- Статические файлы ---
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+# --- Подключаем Prometheus-метрики (ВНЕ startup-события) ---
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
-# --- Глобальные обработчики ошибок (без изменений) ---
+
+# --- Глобальные обработчики ошибок ---
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "error": {"type": "http_exception", "message": exc.detail, "status_code": exc.status_code}})
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "error": {
+                "type": "http_exception",
+                "message": exc.detail,
+                "status_code": exc.status_code,
+            },
+        },
+    )
+
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": exc.errors(), "error": {"type": "validation_error", "message": "Validation error", "status_code": status.HTTP_422_UNPROCESSABLE_ENTITY}})
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.errors(),
+            "error": {
+                "type": "validation_error",
+                "message": "Validation error",
+                "status_code": status.HTTP_422_UNPROCESSABLE_ENTITY,
+            },
+        },
+    )
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled error", exc_info=exc)
-    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"detail": "Internal server error", "error": {"type": "internal_error", "message": "Internal server error", "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR}})
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    pass
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "Internal server error",
+            "error": {
+                "type": "internal_error",
+                "message": "Internal server error",
+                "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            },
+        },
+    )
