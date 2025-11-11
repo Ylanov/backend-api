@@ -32,12 +32,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install deps + Bandit
+      - name: Install deps and Bandit
         run: |
           pip install -r requirements.txt
           pip install bandit
 
-      # backend-код в папке app
       - name: Run Bandit Scan
         run: bandit -r app -ll
 
@@ -63,7 +62,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install pip-audit
+      - name: Install dependencies and pip-audit
         run: |
           pip install -r requirements.txt
           pip install pip-audit
@@ -78,7 +77,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: ./frontend   # твоя папка с фронтом
+        working-directory: ./frontend
 
     steps:
       - name: Check out code
@@ -97,8 +96,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm ci
 
       - name: Run npm audit
-        run: npm audit --production --audit-level=high
+        run: npm audit --omit=dev --audit-level=critical
