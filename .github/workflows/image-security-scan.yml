@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: write   # нужно, чтобы пушить образ в GHCR
 
 jobs:
   scan-backend-image:
@@ -28,20 +29,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Собираем локальный образ бэкенда
+      # Собираем и пушим образ для скана
       - name: Build backend image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: false
-          tags: ghcr.io/${{ github.repository_owner }}/pyro-api:ci-scan
+          push: true
+          tags: ghcr.io/${{ toLower(github.repository_owner) }}/pyro-api:ci-scan
 
-      # Сканируем собранный образ Trivy
+      # Сканируем образ Trivy из GHCR
       - name: Run Trivy scan
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/pyro-api:ci-scan
+          image-ref: ghcr.io/${{ toLower(github.repository_owner) }}/pyro-api:ci-scan
           format: 'table'
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
