@@ -1,0 +1,51 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Virtual Environment ---
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# --- IDE / Editor Files ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- OS Files ---
+.DS_Store
+Thumbs.db
+
+# --- Secrets ---
+# !!! ОЧЕНЬ ВАЖНО !!!
+.env
+.env.*
+!.env.example
+api-secrets.env
+
+# --- Node.js / Frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/.DS_Store
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# --- Build artifacts ---
+build/
+dist/
+*.egg-info/
+
+# --- Test artifacts ---
+.pytest_cache/
+.coverage
+htmlcov/

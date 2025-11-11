@@ -1,0 +1,36 @@
+# ingress.yaml (для работы за Nginx Proxy Manager)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pyro-ingress
+  namespace: default
+  annotations:
+    # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+    # Убираем все аннотации, связанные с SSL, так как этим занимается NPM
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  # Убираем секцию TLS, сертификатом управляет NPM
+  # tls:
+  #   - hosts:
+  #       - pyro.asy-tk.ru
+  #     secretName: pyro-tls-secret
+  rules:
+    - host: pyro.asy-tk.ru
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: pyro-api
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pyro-frontend
+                port:
+                  number: 80

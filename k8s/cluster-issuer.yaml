@@ -1,0 +1,18 @@
+# cluster-issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Замените на ваш email
+    email: yroshuk.2001@gmail.com
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      # Имя секрета, где будет храниться приватный ключ аккаунта ACME
+      name: letsencrypt-prod-account-key
+    # Метод подтверждения владения доменом (HTTP01 самый простой)
+    solvers:
+    - http01:
+        ingress:
+          class: nginx # Указываем класс нашего ingress-контроллера

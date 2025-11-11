@@ -1,0 +1,37 @@
+# deployment-frontend.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyro-frontend
+  namespace: default
+  labels:
+    app: pyro-frontend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: pyro-frontend
+  template:
+    metadata:
+      labels:
+        app: pyro-frontend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-creds
+      containers:
+        - name: pyro-frontend
+          # Убедитесь, что тег образа верный
+          image: ghcr.io/ylanov/pyro-frontend:2.0.611-f
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+      restartPolicy: Always

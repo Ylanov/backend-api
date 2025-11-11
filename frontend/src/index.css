@@ -1,0 +1,35 @@
+/* frontend/src/index.css */
+
+/* Устанавливаем базовые стили для всего документа */
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f4f6f8; /* Легкий фон для всего приложения, как в Material-проектах */
+}
+
+/* Улучшение внешнего вида скроллбаров (опционально, но красиво) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Убираем стрелки у числовых инпутов, Material-UI использует свои контролы */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

@@ -1,0 +1,104 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  # --- ЗАДАЧА №1: Сканирование Python-кода (Bandit) ---
+  scan-python-code:
+    name: Scan Python Code (Bandit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install deps + Bandit
+        run: |
+          pip install -r requirements.txt
+          pip install bandit
+
+      # backend-код в папке app
+      - name: Run Bandit Scan
+        run: bandit -r app -ll
+
+  # --- ЗАДАЧА №2: Сканирование Python-зависимостей (pip-audit) ---
+  scan-python-dependencies:
+    name: Scan Python Dependencies (pip-audit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install pip-audit
+        run: |
+          pip install -r requirements.txt
+          pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt --strict
+
+  # --- ЗАДАЧА №3: Сканирование Frontend-зависимостей (npm audit) ---
+  scan-frontend-dependencies:
+    name: Scan Frontend Dependencies (npm audit)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./frontend   # твоя папка с фронтом
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --production --audit-level=high

@@ -1,0 +1,12 @@
+# pvc-uploads.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pyro-uploads-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path # Используем тот же storage class, что и для БД
+  resources:
+    requests:
+      storage: 15Gi

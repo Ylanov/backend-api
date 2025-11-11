@@ -1,0 +1,17 @@
+# service-frontend.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyro-frontend
+  namespace: default
+  labels:
+    app: pyro-frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: pyro-frontend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80

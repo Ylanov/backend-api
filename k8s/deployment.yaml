@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyro-api
+  namespace: default
+  labels:
+    app: pyro-api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: pyro-api
+  template:
+    metadata:
+      labels:
+        app: pyro-api
+    spec:
+      imagePullSecrets:
+        - name: ghcr-creds
+      containers:
+        - name: pyro-api
+          image: ghcr.io/ylanov/pyro-api:2.0.612
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+
+          envFrom:
+            # Только секреты приложения
+            - secretRef:
+                name: pyro-api-env-secrets
+
+          env:
+            # SECRET_KEY из app-секрета
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pyro-api-env-secrets
+                  key: SECRET_KEY
+
+            # Параметры БД из секрета CloudNativePG pyro-db-app
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: pyro-db-app
+                  key: host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: pyro-db-app
+                  key: port
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pyro-db-app
+                  key: user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pyro-db-app
+                  key: password
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: pyro-db-app
+                  key: dbname
+
+            # Итоговый URL для asyncpg
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+
+          volumeMounts:
+            - name: uploads-storage
+              mountPath: /uploads
+
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+
+      volumes:
+        - name: uploads-storage
+          persistentVolumeClaim:
+            claimName: pyro-uploads-pvc
+
+      restartPolicy: Always

@@ -1,0 +1,82 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pyro-db
+  namespace: default
+spec:
+  # 3 инстанса: 1 primary + 2 replicas (авто-failover)
+  instances: 3
+
+  # Образ с PostGIS
+  imageName: ghcr.io/cloudnative-pg/postgis:16
+
+  # -------- Хранилище данных --------
+  storage:
+    size: 25Gi
+    # storageClassName: local-path    # можно явно указать, но не обязательно
+
+  # Отдельный PVC для WAL
+  walStorage:
+    size: 10Gi
+    # storageClassName: local-path
+
+  # -------- Ресурсы (под твою ВМ 32ГБ/8 vCPU) --------
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+
+  # -------- Инициализация БД (только при первом создании!) --------
+  bootstrap:
+    initdb:
+      database: pyro_registry
+      owner: pyro_user
+      encoding: "UTF8"
+      # locale: "ru_RU.UTF-8"  # включай только если создаёшь новую БД
+
+  # -------- Репликация и согласованность --------
+  minSyncReplicas: 1
+  maxSyncReplicas: 1
+  replicationSlots:
+    highAvailability:
+      enabled: true
+
+  # -------- Настройки PostgreSQL (производительность) --------
+  postgresql:
+    parameters:
+      # Память / кэш
+      shared_buffers: "2GB"
+      effective_cache_size: "6GB"
+      work_mem: "64MB"
+      maintenance_work_mem: "1GB"
+      temp_buffers: "64MB"
+
+      # WAL / чекпойнты
+      wal_compression: "on"
+      max_wal_size: "4GB"
+      min_wal_size: "1GB"
+      checkpoint_timeout: "10min"
+      checkpoint_completion_target: "0.9"
+
+      # Соединения / планировщик
+      max_connections: "200"
+
+      # Автовакуум
+      autovacuum: "on"
+      autovacuum_naptime: "10s"
+      autovacuum_vacuum_cost_limit: "2000"
+      autovacuum_vacuum_scale_factor: "0.05"
+      autovacuum_analyze_scale_factor: "0.02"
+
+      # Согласованность
+      synchronous_commit: "on"
+
+      # Диск
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+
+  # -------- Политика обновления primary --------
+  primaryUpdateStrategy: unsupervised
