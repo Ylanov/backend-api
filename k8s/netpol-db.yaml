@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-only-api-to-db
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: pyro-db
+  policyTypes:
+    - Ingress
+  ingress:
+    # 1) Разрешаем входящие соединения от pod'ов бэкенда pyro-api
+    - from:
+        - podSelector:
+            matchLabels:
+              app: pyro-api
+      ports:
+        - protocol: TCP
+          port: 5432
+
+    # 2) Разрешаем трафик между самими Postgres-подами кластера (репликация, служебное)
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: pyro-db
+      ports:
+        - protocol: TCP
+          port: 5432
