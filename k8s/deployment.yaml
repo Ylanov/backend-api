@@ -16,8 +16,17 @@ spec:
       labels:
         app: pyro-api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
       imagePullSecrets:
         - name: ghcr-creds
+
       containers:
         - name: pyro-api
           image: ghcr.io/ylanov/pyro-api:2.0.612
@@ -26,20 +35,23 @@ spec:
             - name: http
               containerPort: 8000
 
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
           envFrom:
-            # Только секреты приложения
             - secretRef:
                 name: pyro-api-env-secrets
 
           env:
-            # SECRET_KEY из app-секрета
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: pyro-api-env-secrets
                   key: SECRET_KEY
 
-            # Параметры БД из секрета CloudNativePG pyro-db-app
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
@@ -66,7 +78,6 @@ spec:
                   name: pyro-db-app
                   key: dbname
 
-            # Итоговый URL для asyncpg
             - name: DATABASE_URL
               value: "postgresql+asyncpg://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
 
