@@ -1,0 +1,76 @@
+name: Sonar • frontend
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/sonar-frontend.yml"
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - "frontend/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node20-${{ hashFiles('frontend/package-lock.json', 'frontend/pnpm-lock.yaml', 'frontend/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-
+
+      - name: Install deps
+        run: |
+          if [ -f package-lock.json ]; then npm ci; \
+          elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm i --frozen-lockfile; \
+          elif [ -f yarn.lock ]; then npm i -g yarn && yarn --frozen-lockfile; \
+          else npm i; fi
+
+      - name: Run tests (try Jest first, then Vitest) and produce coverage
+        run: |
+          mkdir -p coverage
+          # Попытка через стандартный npm test
+          npm test -- --coverage || true
+          # Если lcov не появился — пробуем Vitest
+          [ -f coverage/lcov.info ] || npx vitest run --coverage || true
+          # На всякий случай: если покрытия нет — создадим пустой lcov (даст 0%)
+          if [ ! -f coverage/lcov.info ]; then
+            echo -e "TN:\nSF:placeholder.js\nDA:1,0\nend_of_record" > coverage/lcov.info
+          fi
+          ls -la coverage
+
+      - name: SonarQube Scan (frontend)
+        uses: SonarSource/sonarqube-scan-action@v2
+        with:
+          projectBaseDir: ./frontend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: Quality Gate (fail on red)
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
