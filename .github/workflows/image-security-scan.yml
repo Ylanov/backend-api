@@ -1,4 +1,4 @@
-name: Image Security Scan
+name: Image Security Scan (local images)
 
 on:
   push:
@@ -8,94 +8,65 @@ on:
 
 permissions:
   contents: read
-  packages: write   # требуется для push в ghcr.io
 
 jobs:
-  # --- БЭКЕНД ---
   scan-backend-image:
     name: Scan Backend Docker Image with Trivy
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Compute lowercase owner
-        id: repo
-        shell: bash
-        run: |
-          owner="${{ github.repository_owner }}"
-          echo "owner_lc=${owner,,}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & push backend image
+      - name: Build backend image (local, no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: true
-          tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-api:ci-scan
+          push: false
+          load: true                # загрузить образ в локальный Docker
+          tags: pyro-api:ci-scan    # локальный тег
 
       - name: Run Trivy scan (backend)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-api:ci-scan
+          image-ref: pyro-api:ci-scan
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
           exit-code: '1'
           ignore-unfixed: true
+          timeout: 10m
 
-  # --- ФРОНТЕНД ---
   scan-frontend-image:
     name: Scan Frontend Docker Image with Trivy
     runs-on: ubuntu-latest
     needs: scan-backend-image
-
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Compute lowercase owner
-        id: repo
-        shell: bash
-        run: |
-          owner="${{ github.repository_owner }}"
-          echo "owner_lc=${owner,,}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & push frontend image
+      - name: Build frontend image (local, no push)
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
-          push: true
-          tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-frontend:ci-scan
+          push: false
+          load: true
+          tags: pyro-frontend:ci-scan
 
       - name: Run Trivy scan (frontend)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-frontend:ci-scan
+          image-ref: pyro-frontend:ci-scan
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
           exit-code: '1'
           ignore-unfixed: true
+          timeout: 10m
