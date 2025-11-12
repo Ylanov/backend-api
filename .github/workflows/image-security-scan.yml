@@ -9,8 +9,7 @@ on:
 # минимально необходимые права
 permissions:
   contents: read
-  packages: write         # пушим временные образы в GHCR
-  security-events: write  # грузим SARIF в Code scanning
+  security-events: write  # для SARIF в Code Scanning (если разрешено)
 
 # отменяем предыдущие запуски в той же ветке
 concurrency:
@@ -27,41 +26,28 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Compute lowercase owner
-        id: repo
-        shell: bash
-        run: |
-          owner="${{ github.repository_owner }}"
-          echo "owner_lc=${owner,,}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build backend image
+      # Собираем локальный образ и загружаем его в Docker (без push в GHCR)
+      - name: Build backend image (local, load)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: true
-          tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-api:ci-scan
+          load: true
+          tags: pyro-api:ci-scan
 
       - name: Run Trivy scan (backend) -> SARIF
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-api:ci-scan
+          image-ref: pyro-api:ci-scan
           format: sarif
           output: trivy-backend.sarif
           vuln-type: os,library
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: '1'
+          exit-code: '1'  # хотим «красный» при критичных уязвимостях у образа
 
       - name: Upload SARIF artifact (backend)
         if: always()
@@ -71,7 +57,7 @@ jobs:
           path: trivy-backend.sarif
 
       - name: Publish SARIF to Code Scanning (backend)
-        if: always()
+        if: always() && (github.event.repository.private == false || vars.GHAS_UPLOAD == 'true')
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-backend.sarif
@@ -86,35 +72,22 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Compute lowercase owner
-        id: repo
-        shell: bash
-        run: |
-          owner="${{ github.repository_owner }}"
-          echo "owner_lc=${owner,,}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build frontend image
+      # Собираем локальный образ фронта (без push)
+      - name: Build frontend image (local, load)
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
-          push: true
-          tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-frontend:ci-scan
+          load: true
+          tags: pyro-frontend:ci-scan
 
       - name: Run Trivy scan (frontend) -> SARIF
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-frontend:ci-scan
+          image-ref: pyro-frontend:ci-scan
           format: sarif
           output: trivy-frontend.sarif
           vuln-type: os,library
@@ -130,7 +103,7 @@ jobs:
           path: trivy-frontend.sarif
 
       - name: Publish SARIF to Code Scanning (frontend)
-        if: always()
+        if: always() && (github.event.repository.private == false || vars.GHAS_UPLOAD == 'true')
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-frontend.sarif
