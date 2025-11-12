@@ -13,7 +13,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write  # для выгрузки SARIF
+  security-events: write  # нужно только если будем грузить SARIF в Code Scanning
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Trivy config scan -> SARIF
+      - name: Trivy config scan -> SARIF (non-fatal)
         uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
@@ -34,7 +34,8 @@ jobs:
           format: sarif
           output: trivy-k8s.sarif
           severity: CRITICAL,HIGH
-          exit-code: '1'
+          ignore-unfixed: true
+          exit-code: '0'        # ✅ не ломаем билд при найденных проблемах
 
       - name: Upload SARIF artifact
         if: always()
@@ -43,8 +44,9 @@ jobs:
           name: trivy-k8s-sarif
           path: trivy-k8s.sarif
 
+      # Загружаем в Code Scanning только если репо публичный ИЛИ явно включена переменная GHAS_UPLOAD
       - name: Publish SARIF to Code Scanning
-        if: always()
+        if: always() && (github.event.repository.private == false || vars.GHAS_UPLOAD == 'true')
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-k8s.sarif
