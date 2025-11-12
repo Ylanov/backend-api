@@ -11,3 +11,4 @@ python-jose[cryptography]
 passlib[bcrypt]
 pydantic-settings
 prometheus-fastapi-instrumentator
+httpx
