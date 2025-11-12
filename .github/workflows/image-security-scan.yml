@@ -1,4 +1,4 @@
-name: Image Security Scan (local images)
+name: Image Security Scan
 
 on:
   push:
@@ -6,67 +6,131 @@ on:
   pull_request:
     branches: [ "main", "master" ]
 
+# минимально необходимые права
 permissions:
   contents: read
+  packages: write         # пушим временные образы в GHCR
+  security-events: write  # грузим SARIF в Code scanning
+
+# отменяем предыдущие запуски в той же ветке
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # --- БЭКЕНД ---
   scan-backend-image:
     name: Scan Backend Docker Image with Trivy
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
+      - name: Compute lowercase owner
+        id: repo
+        shell: bash
+        run: |
+          owner="${{ github.repository_owner }}"
+          echo "owner_lc=${owner,,}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build backend image (local, no push)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build backend image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: false
-          load: true                # загрузить образ в локальный Docker
-          tags: pyro-api:ci-scan    # локальный тег
+          push: true
+          tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-api:ci-scan
 
-      - name: Run Trivy scan (backend)
+      - name: Run Trivy scan (backend) -> SARIF
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: pyro-api:ci-scan
-          format: table
+          image-ref: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-api:ci-scan
+          format: sarif
+          output: trivy-backend.sarif
           vuln-type: os,library
           severity: CRITICAL,HIGH
-          exit-code: '1'
           ignore-unfixed: true
-          timeout: 10m
+          exit-code: '1'
 
+      - name: Upload SARIF artifact (backend)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-backend-sarif
+          path: trivy-backend.sarif
+
+      - name: Publish SARIF to Code Scanning (backend)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-backend.sarif
+
+  # --- ФРОНТЕНД ---
   scan-frontend-image:
     name: Scan Frontend Docker Image with Trivy
     runs-on: ubuntu-latest
     needs: scan-backend-image
+
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
+      - name: Compute lowercase owner
+        id: repo
+        shell: bash
+        run: |
+          owner="${{ github.repository_owner }}"
+          echo "owner_lc=${owner,,}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build frontend image (local, no push)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build frontend image
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
-          push: false
-          load: true
-          tags: pyro-frontend:ci-scan
+          push: true
+          tags: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-frontend:ci-scan
 
-      - name: Run Trivy scan (frontend)
+      - name: Run Trivy scan (frontend) -> SARIF
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: pyro-frontend:ci-scan
-          format: table
+          image-ref: ghcr.io/${{ steps.repo.outputs.owner_lc }}/pyro-frontend:ci-scan
+          format: sarif
+          output: trivy-frontend.sarif
           vuln-type: os,library
           severity: CRITICAL,HIGH
-          exit-code: '1'
           ignore-unfixed: true
-          timeout: 10m
+          exit-code: '1'
+
+      - name: Upload SARIF artifact (frontend)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-frontend-sarif
+          path: trivy-frontend.sarif
+
+      - name: Publish SARIF to Code Scanning (frontend)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-frontend.sarif

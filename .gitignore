@@ -1,13 +1,13 @@
 # --- Python ---
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 .Python
 pip-log.txt
 pip-delete-this-directory.txt
 
-# --- Virtual Environment ---
+# --- Virtual Environments ---
 .venv/
 venv/
 ENV/
@@ -15,26 +15,30 @@ env/
 env.bak/
 venv.bak/
 
-# --- IDE / Editor Files ---
+# --- IDE / Editor ---
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# --- OS Files ---
+# --- OS files ---
 .DS_Store
 Thumbs.db
 
-# --- Secrets ---
-# !!! ОЧЕНЬ ВАЖНО !!!
+# --- Secrets (VERY IMPORTANT) ---
 .env
 .env.*
 !.env.example
 api-secrets.env
 
+# --- Backend uploads / temp (из переменной UPLOAD_DIR) ---
+uploads/
+uploads_ci/
+
 # --- Node.js / Frontend ---
 frontend/node_modules/
 frontend/dist/
+frontend/coverage/
 frontend/.DS_Store
 frontend/.env
 frontend/.env.*
@@ -49,3 +53,15 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# --- SonarQube local workdirs (на всякий случай) ---
+.scannerwork/
+frontend/.scannerwork/
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

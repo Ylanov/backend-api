@@ -10,25 +10,41 @@ on:
     branches: [ "main", "master" ]
     paths:
       - "k8s/**"
-      - ".github/workflows/k8s-config-scan.yml"
 
 permissions:
   contents: read
+  security-events: write  # для выгрузки SARIF
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  scan-k8s-config:
-    name: Scan k8s manifests with Trivy
+  trivy-config:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Trivy config scan
+      - name: Trivy config scan -> SARIF
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          scan-type: 'config'
-          scan-ref: './k8s'
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
+          scan-type: config
+          scan-ref: ./k8s
+          format: sarif
+          output: trivy-k8s.sarif
+          severity: CRITICAL,HIGH
           exit-code: '1'
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-k8s-sarif
+          path: trivy-k8s.sarif
+
+      - name: Publish SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-k8s.sarif
