@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  packages: write  # нужно для пуша в GHCR
+  packages: write   # требуется для push в ghcr.io
 
 jobs:
   # --- БЭКЕНД ---
@@ -37,7 +37,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build backend image
+      - name: Build & push backend image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -82,7 +82,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build frontend image
+      - name: Build & push frontend image
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
