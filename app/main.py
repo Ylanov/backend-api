@@ -15,6 +15,7 @@ from app.core.settings import settings
 from app.middleware.security_headers import SecurityHeadersMiddleware
 
 # --- Импорты всех роутеров ---
+from app.api import dashboard as dashboard_api
 from app.api import tasks as tasks_api
 from app.api import pyrotechnicians as pyros_api
 from app.api import teams as teams_api
@@ -55,6 +56,7 @@ app.add_middleware(
 api_router = APIRouter(prefix="/api")
 
 # --- Подключаем все роутеры к api_router ---
+api_router.include_router(dashboard_api.router)
 api_router.include_router(tasks_api.router)
 api_router.include_router(pyros_api.router)
 api_router.include_router(teams_api.router)

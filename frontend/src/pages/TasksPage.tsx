@@ -5,7 +5,6 @@ import {
   Box,
   Paper,
   Typography,
-  Stack,
   Button,
   IconButton,
   Tooltip,
@@ -23,31 +22,25 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import AssignmentIcon from "@mui/icons-material/Assignment";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-// ИСПРАВЛЕНИЕ: Убираем неиспользуемые импорты 'Team' и 'Zone'
 import type { Task } from "../types";
 import { TaskStatus, TaskPriority } from "../types";
-import {
-  fetchTasks,
-  deleteTask,
-  fetchTeams,
-  fetchZones,
-} from "../services/api";
+import { fetchTasks, deleteTask, fetchTeams, fetchZones } from "../services/api";
 import TaskDialog from "../components/TaskDialog";
 import { useNotification } from "../notifications/NotificationProvider";
+import PageHeader from "../components/PageHeader";
 
-// Вспомогательные функции (без изменений)
-const statusMap: Record<TaskStatus, { label: string; color: any }> = {
+// Мапы статусов/приоритетов
+const statusMap: Record<TaskStatus, { label: string; color: "primary" | "warning" | "success" | "default" }> = {
   [TaskStatus.NEW]: { label: "Новая", color: "primary" },
   [TaskStatus.IN_PROGRESS]: { label: "В работе", color: "warning" },
   [TaskStatus.COMPLETED]: { label: "Завершена", color: "success" },
   [TaskStatus.CANCELLED]: { label: "Отменена", color: "default" },
 };
 
-const priorityMap: Record<TaskPriority, { label: string; color: any }> = {
+const priorityMap: Record<TaskPriority, { label: string; color: "info" | "primary" | "warning" | "error" }> = {
   [TaskPriority.LOW]: { label: "Низкий", color: "info" },
   [TaskPriority.MEDIUM]: { label: "Средний", color: "primary" },
   [TaskPriority.HIGH]: { label: "Высокий", color: "warning" },
@@ -61,30 +54,30 @@ export default function TasksPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
 
-  // ИСПРАВЛЕНИЕ: Явно указываем generic-типы для useQuery.
-  // Это помогает TypeScript не терять контекст и решает ошибки с 'any'.
-  const { data: tasks, isLoading: isLoadingTasks, error: tasksError } = useQuery({
-    queryKey: ['tasks'],
+  const {
+    data: tasks,
+    isLoading: isLoadingTasks,
+    error: tasksError,
+  } = useQuery({
+    queryKey: ["tasks"],
     queryFn: fetchTasks,
   });
 
+  // Эти запросы нужны для TaskDialog
   const { data: teams = [], isLoading: isLoadingTeams } = useQuery({
-    queryKey: ['teams'],
+    queryKey: ["teams"],
     queryFn: fetchTeams,
   });
 
   const { data: zones = [], isLoading: isLoadingZones } = useQuery({
-    queryKey: ['zones'],
+    queryKey: ["zones"],
     queryFn: fetchZones,
   });
 
-  // ИСПРАВЛЕНИЕ: Упрощаем и исправляем useMutation
   const deleteMutation = useMutation({
     mutationFn: (taskId: number) => deleteTask(taskId),
-    // onSuccess здесь будет вызываться *после* успешного завершения мутации
     onSuccess: () => {
-      // ИСПРАВЛЕНИЕ: Используем 'void', чтобы показать, что мы намеренно игнорируем Promise
-      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (error: Error) => {
       notifyError(error.message || "Ошибка при удалении задачи.");
@@ -105,19 +98,14 @@ export default function TasksPage() {
 
   const handleDialogSave = () => {
     setDialogOpen(false);
-    void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
   };
 
-  // ИСПРАВЛЕНИЕ: Корректный вызов мутации
   const handleDelete = (task: Task) => {
     if (window.confirm(`Вы уверены, что хотите удалить задачу "${task.title}"?`)) {
-      // Вызываем мутацию, передавая только ID.
-      // Для кастомного сообщения об успехе, используем опцию onSuccess прямо здесь.
       deleteMutation.mutate(task.id, {
         onSuccess: () => {
           notifySuccess(`Задача «${task.title}» удалена`);
-          // Инвалидация уже настроена в самом хуке useMutation,
-          // так что здесь ее можно не дублировать.
         },
       });
     }
@@ -127,15 +115,16 @@ export default function TasksPage() {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <AssignmentIcon color="primary" />
-          <Typography variant="h5">Задачи</Typography>
-        </Stack>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate}>
-          Новая задача
-        </Button>
-      </Stack>
+      <PageHeader
+        title="Задачи"
+        subtitle="Управляйте задачами, командами и зонами"
+        sticky
+        actions={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate}>
+            Новая задача
+          </Button>
+        }
+      />
 
       {tasksError && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -144,39 +133,84 @@ export default function TasksPage() {
       )}
 
       <Paper variant="outlined">
-        <TableContainer>
-          <Table>
+        <TableContainer sx={{ width: "100%", overflowX: "auto" }}>
+          <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: "bold" }}>Название</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Статус</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Приоритет</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Команда</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Зона</TableCell>
-                <TableCell align="right" sx={{ fontWeight: "bold" }}>Действия</TableCell>
+                {/* На телефоне прячем «Команда» и «Зона», чтобы таблица не рвалась */}
+                <TableCell sx={{ fontWeight: "bold", display: { xs: "none", sm: "table-cell" } }}>
+                  Команда
+                </TableCell>
+                <TableCell sx={{ fontWeight: "bold", display: { xs: "none", sm: "table-cell" } }}>
+                  Зона
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                  Действия
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} align="center" sx={{ p: 4 }}><CircularProgress /></TableCell></TableRow>
-              ) : !tasks || tasks.length === 0 ? ( // ИСПРАВЛЕНИЕ: Более надежная проверка на !tasks
-                <TableRow><TableCell colSpan={6} align="center" sx={{ p: 4 }}><Typography color="text.secondary">Задач пока нет.</Typography></TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ p: 4 }}>
+                    <CircularProgress />
+                  </TableCell>
+                </TableRow>
+              ) : !tasks || tasks.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ p: 4 }}>
+                    <Typography color="text.secondary">Задач пока нет.</Typography>
+                  </TableCell>
+                </TableRow>
               ) : (
-                tasks.map((task) => ( // Теперь 'task' имеет правильный тип Task
+                tasks.map((task) => (
                   <TableRow key={task.id} hover>
-                    <TableCell sx={{ fontWeight: 500 }}><Link component={RouterLink} to={`/tasks/${task.id}`} underline="hover">{task.title}</Link></TableCell>
-                    <TableCell><Chip label={statusMap[task.status].label} color={statusMap[task.status].color} size="small" /></TableCell>
-                    <TableCell><Chip label={priorityMap[task.priority].label} color={priorityMap[task.priority].color} size="small" variant="outlined" /></TableCell>
-                    <TableCell>{task.team?.name ?? "—"}</TableCell>
-                    <TableCell>{task.zone?.name ?? "—"}</TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Редактировать"><IconButton onClick={() => handleOpenEdit(task)}><EditIcon /></IconButton></Tooltip>
+                    <TableCell
+                      sx={{
+                        fontWeight: 500,
+                        maxWidth: 360,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      <Link component={RouterLink} to={`/tasks/${task.id}`} underline="hover">
+                        {task.title}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={statusMap[task.status].label} color={statusMap[task.status].color} size="small" />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={priorityMap[task.priority].label}
+                        color={priorityMap[task.priority].color}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
+                      {task.team?.name ?? "—"}
+                    </TableCell>
+                    <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
+                      {task.zone?.name ?? "—"}
+                    </TableCell>
+                    <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                      <Tooltip title="Редактировать">
+                        <IconButton onClick={() => handleOpenEdit(task)} size="small">
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Удалить">
                         <IconButton
                           onClick={() => handleDelete(task)}
                           disabled={deleteMutation.isPending}
+                          size="small"
                         >
-                          <DeleteIcon />
+                          <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     </TableCell>

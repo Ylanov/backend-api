@@ -5,7 +5,7 @@ import enum
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, constr
+from pydantic import BaseModel, Field, constr, computed_field
 
 
 # ------------------------------------------------------------
@@ -256,10 +256,15 @@ class DocumentBase(BaseModel):
 class Document(DocumentBase):
     id: int
     original_name: str
+    unique_name: str
     mime_type: str
     size: int
     uploaded_at: datetime
-    download_url: str
+
+    @computed_field
+    @property
+    def download_url(self) -> str:
+        return f"/uploads/{self.unique_name}"
 
     class Config:
         from_attributes = True

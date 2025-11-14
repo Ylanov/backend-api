@@ -1,5 +1,5 @@
 // frontend/src/pages/ReportsPage.tsx
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Box,
   Paper,
@@ -12,19 +12,12 @@ import {
   Select,
   MenuItem,
   TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Alert,
-  CircularProgress,
   Chip,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
-import AssessmentIcon from "@mui/icons-material/Assessment";
 import DownloadIcon from "@mui/icons-material/Download";
-
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 
 import type { Task, Team, Zone } from "../types";
@@ -33,14 +26,15 @@ import {
   fetchTasksReport,
   fetchTeams,
   fetchZones,
-  isCanceled,
   type TaskReportFilters,
 } from "../services/api";
 import { useNotification } from "../notifications/NotificationProvider";
+import PageHeader from "../components/PageHeader";
+import { DataTable, type DataTableColumn } from "../components/DataTable";
 
-// Для генерации Word-отчета
+// DOCX
 import {
-  Document,
+  Document as DocxDocument,
   Packer,
   Paragraph,
   TextRun,
@@ -65,31 +59,41 @@ const priorityOptions: { value: TaskPriority; label: string }[] = [
   { value: TaskPriority.CRITICAL, label: "Критический" },
 ];
 
-const statusMap: Record<TaskStatus, { label: string; color: any }> = {
+const statusMap: Record<
+  TaskStatus,
+  { label: string; color: "primary" | "warning" | "success" | "default" }
+> = {
   [TaskStatus.NEW]: { label: "Новая", color: "primary" },
   [TaskStatus.IN_PROGRESS]: { label: "В работе", color: "warning" },
   [TaskStatus.COMPLETED]: { label: "Завершена", color: "success" },
   [TaskStatus.CANCELLED]: { label: "Отменена", color: "default" },
 };
 
-const priorityMap: Record<TaskPriority, { label: string; color: any }> = {
+const priorityMap: Record<
+  TaskPriority,
+  { label: string; color: "info" | "primary" | "warning" | "error" }
+> = {
   [TaskPriority.LOW]: { label: "Низкий", color: "info" },
   [TaskPriority.MEDIUM]: { label: "Средний", color: "primary" },
   [TaskPriority.HIGH]: { label: "Высокий", color: "warning" },
   [TaskPriority.CRITICAL]: { label: "Критический", color: "error" },
 };
 
+const EMPTY_FILTERS: TaskReportFilters = {
+  date_from: null,
+  date_to: null,
+  team_id: null,
+  zone_id: null,
+  status: null,
+  priority: null,
+};
+
 export default function ReportsPage() {
+  const theme = useTheme();
+  const smUp = useMediaQuery(theme.breakpoints.up("sm"));
   const { notifyError, notifySuccess } = useNotification();
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // фильтры
+  // локальные поля фильтра
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [teamId, setTeamId] = useState<number | "">("");
@@ -97,10 +101,61 @@ export default function ReportsPage() {
   const [status, setStatus] = useState<TaskStatus | "">("");
   const [priority, setPriority] = useState<TaskPriority | "">("");
 
-  // для отмены запросов
-  const abortRef = useRef<AbortController | null>(null);
+  // реально примененные фильтры, которые уходят на бэкенд
+  const [currentFilters, setCurrentFilters] =
+    useState<TaskReportFilters>(EMPTY_FILTERS);
 
-  const buildFilters = (): TaskReportFilters => ({
+  // --- справочники: команды и зоны через React Query ---
+
+  const {
+    data: teams = [],
+    isLoading: isLoadingTeams,
+    isError: isTeamsError,
+    error: teamsError,
+  } = useQuery({
+    queryKey: ["teams"],
+    queryFn: fetchTeams,
+    onError: (e: any) => {
+      const msg = e?.message || "Не удалось загрузить список команд.";
+      notifyError(msg);
+    },
+  });
+
+  const {
+    data: zones = [],
+    isLoading: isLoadingZones,
+    isError: isZonesError,
+    error: zonesError,
+  } = useQuery({
+    queryKey: ["zones"],
+    queryFn: fetchZones,
+    onError: (e: any) => {
+      const msg = e?.message || "Не удалось загрузить список зон.";
+      notifyError(msg);
+    },
+  });
+
+  // --- сам отчет по задачам через React Query ---
+
+  const {
+    data: tasks = [],
+    isLoading: isLoadingReport,
+    isFetching: isFetchingReport,
+    isError: isReportError,
+    error: reportError,
+  } = useQuery<Task[], any>({
+    queryKey: ["tasks-report", currentFilters],
+    queryFn: ({ signal }) => fetchTasksReport(currentFilters, signal),
+    onError: (e: any) => {
+      const msg = e?.message || "Не удалось загрузить отчет.";
+      notifyError(msg);
+    },
+  });
+
+  const loading = isLoadingReport || isFetchingReport;
+  const filtersLoading = isLoadingTeams || isLoadingZones;
+
+  const buildFiltersFromInputs = (): TaskReportFilters => ({
     date_from: dateFrom || null,
     date_to: dateTo || null,
     team_id: teamId === "" ? null : Number(teamId),
@@ -109,57 +164,9 @@ export default function ReportsPage() {
     priority: priority || null,
   });
 
-  const loadFiltersData = async () => {
-    try {
-      const [teamsData, zonesData] = await Promise.all([
-        fetchTeams(),
-        fetchZones(),
-      ]);
-      setTeams(teamsData);
-      setZones(zonesData);
-    } catch (e: any) {
-      const msg = e?.message || "Не удалось загрузить справочники.";
-      notifyError(msg);
-    }
-  };
-
-  const loadReport = async () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const filters = buildFilters();
-      const data = await fetchTasksReport(filters, controller.signal);
-      setTasks(data);
-    } catch (e: any) {
-      if (isCanceled(e)) return;
-      const msg = e?.message || "Не удалось загрузить отчет.";
-      setError(msg);
-      notifyError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadFiltersData();
-    loadReport();
-    return () => {
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleApplyFilters = () => {
-    loadReport();
+    const nextFilters = buildFiltersFromInputs();
+    setCurrentFilters(nextFilters);
   };
 
   const handleResetFilters = () => {
@@ -169,17 +176,17 @@ export default function ReportsPage() {
     setZoneId("");
     setStatus("");
     setPriority("");
-    loadReport();
+    setCurrentFilters(EMPTY_FILTERS);
   };
 
-  const handleExportWord = async () => {
-    if (tasks.length === 0) {
+  const handleExportToWord = async () => {
+    if (!tasks || tasks.length === 0) {
       notifyError("Нет данных для отчета.");
       return;
     }
 
     try {
-      const filters = buildFilters();
+      const filters = currentFilters || EMPTY_FILTERS;
       const filterLines: string[] = [];
 
       if (filters.date_from) filterLines.push(`С даты: ${filters.date_from}`);
@@ -189,25 +196,28 @@ export default function ReportsPage() {
         const t = teams.find((x) => x.id === filters.team_id);
         if (t) filterLines.push(`Команда: ${t.name}`);
       }
+
       if (filters.zone_id) {
         const z = zones.find((x) => x.id === filters.zone_id);
         if (z) filterLines.push(`Зона: ${z.name}`);
       }
+
       if (filters.status) {
-        const s = statusOptions.find((x) => x.value === filters.status);
-        if (s) filterLines.push(`Статус: ${s.label}`);
+        const st = statusOptions.find((s) => s.value === filters.status);
+        filterLines.push(`Статус: ${st?.label ?? filters.status}`);
       }
+
       if (filters.priority) {
-        const p = priorityOptions.find((x) => x.value === filters.priority);
-        if (p) filterLines.push(`Приоритет: ${p.label}`);
+        const pr = priorityOptions.find((p) => p.value === filters.priority);
+        filterLines.push(`Приоритет: ${pr?.label ?? filters.priority}`);
       }
+
       if (filterLines.length === 0) {
         filterLines.push("Без фильтров (все задачи).");
       }
 
       const rows: DocxTableRow[] = [];
 
-      // шапка таблицы
       rows.push(
         new DocxTableRow({
           children: [
@@ -256,9 +266,7 @@ export default function ReportsPage() {
             new DocxTableCell({
               children: [
                 new Paragraph({
-                  children: [
-                    new TextRun({ text: "Дата создания", bold: true }),
-                  ],
+                  children: [new TextRun({ text: "Дата создания", bold: true })],
                 }),
               ],
             }),
@@ -266,17 +274,12 @@ export default function ReportsPage() {
         })
       );
 
-      // строки по задачам
       tasks.forEach((task) => {
         rows.push(
           new DocxTableRow({
             children: [
-              new DocxTableCell({
-                children: [new Paragraph(String(task.id))],
-              }),
-              new DocxTableCell({
-                children: [new Paragraph(task.title)],
-              }),
+              new DocxTableCell({ children: [new Paragraph(String(task.id))] }),
+              new DocxTableCell({ children: [new Paragraph(task.title)] }),
               new DocxTableCell({
                 children: [new Paragraph(statusMap[task.status].label)],
               }),
@@ -304,24 +307,17 @@ export default function ReportsPage() {
       });
 
       const table = new DocxTable({
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
+        width: { size: 100, type: WidthType.PERCENTAGE },
         rows,
       });
 
-      const doc = new Document({
+      const doc = new DocxDocument({
         sections: [
           {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({
-                    text: "Отчет по задачам",
-                    bold: true,
-                    size: 32,
-                  }),
+                  new TextRun({ text: "Отчет по задачам", bold: true, size: 32 }),
                 ],
               }),
               new Paragraph({
@@ -334,13 +330,7 @@ export default function ReportsPage() {
               }),
               new Paragraph({}),
               new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Фильтры:",
-                    bold: true,
-                    size: 24,
-                  }),
-                ],
+                children: [new TextRun({ text: "Фильтры:", bold: true, size: 24 })],
               }),
               ...filterLines.map(
                 (line) =>
@@ -362,46 +352,120 @@ export default function ReportsPage() {
       saveAs(blob, fileName);
       notifySuccess("Отчет в формате Word сформирован.");
     } catch (e: any) {
-      console.error(e);
       const msg = e?.message || "Не удалось сформировать Word-отчет.";
       notifyError(msg);
     }
   };
 
+  const combinedFiltersError =
+    (isTeamsError && (teamsError as any)?.message) ||
+    (isZonesError && (zonesError as any)?.message);
+
+  const reportErrorText = isReportError
+    ? (reportError as any)?.message || "Не удалось загрузить отчет."
+    : null;
+
+  const columns: DataTableColumn<Task>[] = [
+    {
+      id: "id",
+      label: "ID",
+      render: (task) => task.id,
+      hideOnXs: true,
+    },
+    {
+      id: "title",
+      label: "Название",
+      render: (task) => (
+        <Typography
+          sx={{
+            maxWidth: 320,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {task.title}
+        </Typography>
+      ),
+    },
+    {
+      id: "status",
+      label: "Статус",
+      render: (task) => (
+        <Chip
+          size="small"
+          label={statusMap[task.status].label}
+          color={statusMap[task.status].color}
+        />
+      ),
+    },
+    {
+      id: "priority",
+      label: "Приоритет",
+      render: (task) => (
+        <Chip
+          size="small"
+          label={priorityMap[task.priority].label}
+          color={priorityMap[task.priority].color}
+          variant="outlined"
+        />
+      ),
+    },
+    {
+      id: "team",
+      label: "Команда",
+      render: (task) => task.team?.name ?? "—",
+      hideOnXs: true,
+    },
+    {
+      id: "zone",
+      label: "Зона",
+      render: (task) => task.zone?.name ?? "—",
+      hideOnXs: true,
+    },
+    {
+      id: "created_at",
+      label: "Дата создания",
+      render: (task) =>
+        task.created_at
+          ? format(new Date(task.created_at), "dd.MM.yyyy")
+          : "—",
+    },
+  ];
+
   return (
     <Box>
-      <Stack
-        direction="row"
-        spacing={1}
-        alignItems="center"
-        justifyContent="space-between"
-        mb={2}
-      >
-        <Stack direction="row" spacing={1} alignItems="center">
-          <AssessmentIcon color="primary" />
-          <Typography variant="h5">Отчеты по задачам</Typography>
-        </Stack>
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" onClick={handleResetFilters}>
-            Сбросить фильтры
-          </Button>
-          <Button variant="contained" onClick={handleApplyFilters}>
-            Обновить отчет
-          </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<DownloadIcon />}
-            onClick={handleExportWord}
-          >
-            Word-отчет
-          </Button>
-        </Stack>
-      </Stack>
+      <PageHeader
+        title="Отчеты по задачам"
+        subtitle="Фильтрация задач по командам, зонам, статусам и приоритетам, а также экспорт в Word."
+        actions={
+          <Stack direction="row" spacing={1}>
+            <Button
+              startIcon={<DownloadIcon />}
+              variant="outlined"
+              size={smUp ? "medium" : "small"}
+              onClick={handleExportToWord}
+              disabled={loading || !tasks || tasks.length === 0}
+            >
+              Экспорт в Word
+            </Button>
+          </Stack>
+        }
+      />
 
-      <Paper variant="outlined" sx={{ mb: 2, p: 2 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6} lg={4}>
+      {combinedFiltersError && (
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Typography color="error">{combinedFiltersError}</Typography>
+        </Paper>
+      )}
+
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Фильтры
+        </Typography>
+
+        <Grid container spacing={1.5}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField
               label="С даты"
               type="date"
@@ -412,7 +476,7 @@ export default function ReportsPage() {
               size="small"
             />
           </Grid>
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} sm={6} md={4}>
             <TextField
               label="По дату"
               type="date"
@@ -423,20 +487,22 @@ export default function ReportsPage() {
               size="small"
             />
           </Grid>
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} sm={6} md={4}>
             <FormControl fullWidth size="small">
               <InputLabel>Команда</InputLabel>
               <Select
                 label="Команда"
                 value={teamId}
                 onChange={(e) =>
-                  setTeamId(e.target.value === "" ? "" : Number(e.target.value))
+                  setTeamId(
+                    e.target.value === "" ? "" : (e.target.value as number)
+                  )
                 }
               >
                 <MenuItem value="">
                   <em>Все</em>
                 </MenuItem>
-                {teams.map((t) => (
+                {teams.map((t: Team) => (
                   <MenuItem key={t.id} value={t.id}>
                     {t.name}
                   </MenuItem>
@@ -444,20 +510,22 @@ export default function ReportsPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} sm={6} md={4}>
             <FormControl fullWidth size="small">
               <InputLabel>Зона</InputLabel>
               <Select
                 label="Зона"
                 value={zoneId}
                 onChange={(e) =>
-                  setZoneId(e.target.value === "" ? "" : Number(e.target.value))
+                  setZoneId(
+                    e.target.value === "" ? "" : (e.target.value as number)
+                  )
                 }
               >
                 <MenuItem value="">
                   <em>Все</em>
                 </MenuItem>
-                {zones.map((z) => (
+                {zones.map((z: Zone) => (
                   <MenuItem key={z.id} value={z.id}>
                     {z.name}
                   </MenuItem>
@@ -465,7 +533,7 @@ export default function ReportsPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} sm={6} md={4}>
             <FormControl fullWidth size="small">
               <InputLabel>Статус</InputLabel>
               <Select
@@ -488,7 +556,7 @@ export default function ReportsPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} sm={6} md={4}>
             <FormControl fullWidth size="small">
               <InputLabel>Приоритет</InputLabel>
               <Select
@@ -514,78 +582,43 @@ export default function ReportsPage() {
             </FormControl>
           </Grid>
         </Grid>
+
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1.5}
+          sx={{ mt: 2 }}
+        >
+          <Button
+            variant="contained"
+            onClick={handleApplyFilters}
+            disabled={filtersLoading || loading}
+          >
+            Применить фильтры
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={handleResetFilters}
+            disabled={filtersLoading || loading}
+          >
+            Сбросить
+          </Button>
+        </Stack>
       </Paper>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Результаты
+        </Typography>
 
-      <Paper variant="outlined">
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: "bold" }}>ID</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Название</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Статус</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Приоритет</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Команда</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Зона</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>
-                  Дата создания
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ p: 4 }}>
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
-              ) : tasks.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ p: 4 }}>
-                    <Typography color="text.secondary">
-                      Данных для отображения нет.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                tasks.map((task) => (
-                  <TableRow key={task.id} hover>
-                    <TableCell>{task.id}</TableCell>
-                    <TableCell>{task.title}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={statusMap[task.status].label}
-                        color={statusMap[task.status].color}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={priorityMap[task.priority].label}
-                        color={priorityMap[task.priority].color}
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>{task.team?.name ?? "—"}</TableCell>
-                    <TableCell>{task.zone?.name ?? "—"}</TableCell>
-                    <TableCell>
-                      {task.created_at
-                        ? format(new Date(task.created_at), "dd.MM.yyyy")
-                        : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <DataTable<Task>
+          columns={columns}
+          rows={tasks}
+          getRowId={(t) => t.id}
+          loading={loading}
+          error={reportErrorText}
+          emptyMessage="Данных для отображения нет."
+          size={smUp ? "medium" : "small"}
+        />
       </Paper>
     </Box>
   );

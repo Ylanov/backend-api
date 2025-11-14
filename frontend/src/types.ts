@@ -208,3 +208,9 @@ export type FirstPasswordChangeRequest = {
   temp_password: string;
   new_password: string;
 };
+
+// --- Dashboard Stats ---
+export type DashboardStats = {
+  tasks_in_progress: number;
+  free_teams: number;
+};

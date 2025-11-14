@@ -1,237 +1,227 @@
 // frontend/src/pages/DocumentsPage.tsx
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Box,
   Paper,
   Typography,
-  Stack,
   Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  CircularProgress,
-  Alert,
   IconButton,
   Tooltip,
 } from "@mui/material";
-import DescriptionIcon from "@mui/icons-material/Description";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import DownloadIcon from "@mui/icons-material/Download";
 import DeleteIcon from "@mui/icons-material/Delete";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 import type { Document } from "../types";
 import {
   fetchDocuments,
   uploadDocument,
   deleteDocument,
-  isCanceled,
 } from "../services/api";
 import { useNotification } from "../notifications/NotificationProvider";
+import PageHeader from "../components/PageHeader";
+import { DataTable, type DataTableColumn } from "../components/DataTable";
 
 export default function DocumentsPage() {
   const { notifyError, notifySuccess } = useNotification();
 
-  const [docs, setDocs] = useState<Document[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-
-  const abortRef = useRef<AbortController | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const loadDocuments = async () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchDocuments(controller.signal);
-      setDocs(data);
-    } catch (e: any) {
-      if (isCanceled(e)) return;
+  // --- Список документов через React Query ---
+  const {
+    data: docs = [],
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch: refetchDocuments,
+  } = useQuery<Document[], any>({
+    queryKey: ["documents"],
+    queryFn: ({ signal }) => fetchDocuments(signal),
+    onError: (e: any) => {
       const msg = e?.message || "Не удалось загрузить список документов.";
-      setError(msg);
       notifyError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
-  useEffect(() => {
-    loadDocuments();
-    return () => {
-      if (abortRef.current) {
-        abortRef.current.abort();
+  const docsLoading = isLoading || isFetching;
+
+  // --- Загрузка документов (upload) ---
+  const uploadMutation = useMutation({
+    mutationFn: async (files: FileList) => {
+      for (const file of Array.from(files)) {
+        await uploadDocument({ file, title: file.name });
       }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    },
+    onSuccess: async () => {
+      notifySuccess("Документы загружены");
+      // Явно перезагружаем список документов
+      await refetchDocuments();
+    },
+    onError: (e: any) => {
+      const msg = e?.message || "Не удалось загрузить документы.";
+      setLocalError(msg);
+      notifyError(msg);
+    },
+  });
+
+  const uploading = uploadMutation.isPending;
+
+  // --- Удаление документа ---
+  const deleteMutation = useMutation({
+    mutationFn: (docId: number) => deleteDocument(docId),
+    onSuccess: async () => {
+      notifySuccess("Документ удалён");
+      // После удаления тоже сразу перезагружаем список
+      await refetchDocuments();
+    },
+    onError: (e: any) => {
+      const msg = e?.message || "Не удалось удалить документ.";
+      setLocalError(msg);
+      notifyError(msg);
+    },
+  });
 
   const handleClickUpload = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFilesSelected = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setUploading(true);
-    setError(null);
+    setLocalError(null);
+    uploadMutation.mutate(files);
 
-    try {
-      for (const file of Array.from(files)) {
-        await uploadDocument({ file, title: file.name });
-      }
-      notifySuccess("Документы загружены");
-      await loadDocuments();
-    } catch (e: any) {
-      const msg = e?.message || "Не удалось загрузить документы.";
-      setError(msg);
-      notifyError(msg);
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
+    // сбрасываем input, чтобы можно было выбрать те же файлы ещё раз
+    e.target.value = "";
   };
 
-  const handleDelete = async (doc: Document) => {
+  const handleDelete = (doc: Document) => {
     if (
       !window.confirm(
         `Удалить документ "${doc.title || doc.original_name}"?`
       )
-    )
+    ) {
       return;
-
-    try {
-      await deleteDocument(doc.id);
-      notifySuccess("Документ удалён");
-      await loadDocuments();
-    } catch (e: any) {
-      const msg = e?.message || "Не удалось удалить документ.";
-      setError(msg);
-      notifyError(msg);
     }
+    setLocalError(null);
+    deleteMutation.mutate(doc.id);
   };
+
+  const columns: DataTableColumn<Document>[] = [
+    {
+      id: "title",
+      label: "Название",
+      render: (doc) => doc.title,
+    },
+    {
+      id: "original_name",
+      label: "Оригинальное имя",
+      render: (doc) => doc.original_name,
+      hideOnXs: true,
+    },
+    {
+      id: "mime_type",
+      label: "Тип",
+      render: (doc) => doc.mime_type,
+      hideOnXs: true,
+    },
+    {
+      id: "size",
+      label: "Размер",
+      render: (doc) => `${(doc.size / 1024).toFixed(1)} КБ`,
+      hideOnXs: true,
+    },
+    {
+      id: "uploaded_at",
+      label: "Загружен",
+      render: (doc) => new Date(doc.uploaded_at).toLocaleString(),
+      hideOnXs: true,
+    },
+    {
+      id: "actions",
+      label: "Действия",
+      align: "right",
+      render: (doc) => (
+        <>
+          <Tooltip title="Скачать">
+            <IconButton
+              component="a"
+              href={doc.download_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="small"
+              sx={{ mr: 0.5 }}
+            >
+              <DownloadIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Удалить">
+            <IconButton
+              color="error"
+              onClick={() => handleDelete(doc)}
+              disabled={deleteMutation.isPending}
+              size="small"
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
+      ),
+    },
+  ];
+
+  const tableError =
+    localError ||
+    (isError
+      ? (error as any)?.message || "Не удалось загрузить список документов."
+      : null);
 
   return (
     <Box>
-      <Stack
-        direction="row"
-        spacing={1}
-        alignItems="center"
-        justifyContent="space-between"
-        mb={2}
-      >
-        <Stack direction="row" spacing={1} alignItems="center">
-          <DescriptionIcon color="primary" />
-          <Typography variant="h5">Документы</Typography>
-        </Stack>
+      <PageHeader
+        title="Документы"
+        subtitle="Хранилище файлов проекта."
+        actions={
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={handleFilesSelected}
+            />
+            <Button
+              variant="contained"
+              startIcon={<UploadFileIcon />}
+              onClick={handleClickUpload}
+              disabled={uploading}
+            >
+              {uploading ? "Загрузка..." : "Загрузить"}
+            </Button>
+          </>
+        }
+      />
 
-        <Stack direction="row" spacing={1} alignItems="center">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={handleFilesSelected}
-          />
-          <Button
-            variant="contained"
-            startIcon={<UploadFileIcon />}
-            onClick={handleClickUpload}
-            disabled={uploading}
-          >
-            {uploading ? "Загрузка..." : "Загрузить"}
-          </Button>
-        </Stack>
-      </Stack>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
+      {localError && (
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Typography color="error">{localError}</Typography>
+        </Paper>
       )}
 
       <Paper variant="outlined">
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: "bold" }}>Название</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Оригинальное имя</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Тип</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Размер</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Загружен</TableCell>
-                <TableCell
-                  sx={{ fontWeight: "bold" }}
-                  align="right"
-                >
-                  Действия
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ p: 4 }}>
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
-              ) : docs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ p: 4 }}>
-                    <Typography color="text.secondary">
-                      Документов пока нет.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                docs.map((doc) => (
-                  <TableRow key={doc.id} hover>
-                    <TableCell>{doc.title}</TableCell>
-                    <TableCell>{doc.original_name}</TableCell>
-                    <TableCell>{doc.mime_type}</TableCell>
-                    <TableCell>
-                      {(doc.size / 1024).toFixed(1)} КБ
-                    </TableCell>
-                    <TableCell>
-                      {new Date(doc.uploaded_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Скачать">
-                        <IconButton
-                          component="a"
-                          href={doc.download_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <DownloadIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Удалить">
-                        <IconButton
-                          color="error"
-                          onClick={() => handleDelete(doc)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <DataTable<Document>
+          columns={columns}
+          rows={docs}
+          getRowId={(d) => d.id}
+          loading={docsLoading}
+          error={tableError}
+          emptyMessage="Документов пока нет."
+          size="medium"
+        />
       </Paper>
     </Box>
   );

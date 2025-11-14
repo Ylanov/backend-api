@@ -1,5 +1,5 @@
 // frontend/src/pages/AdminLogsPage.tsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -23,53 +23,76 @@ import {
   Typography,
   Paper,
 } from "@mui/material";
-import SecurityIcon from "@mui/icons-material/Security";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 import { useNotification } from "../notifications/NotificationProvider";
 import {
   fetchLoginEvents,
   fetchAuditLogs,
   getMe,
-  isCanceled,
 } from "../services/api";
 import type {
   LoginEvent,
   AuditLogEntry,
   Pyrotechnician,
 } from "../types";
+import PageHeader from "../components/PageHeader";
 
 type TabKey = "logins" | "audit";
 
+type LoginSuccessFilter = "all" | "success" | "fail";
+
+interface LoginFilters {
+  email: string;
+  success: LoginSuccessFilter;
+  date_from: string | null;
+  date_to: string | null;
+}
+
+interface AuditFilters {
+  action: string;
+  date_from: string | null;
+  date_to: string | null;
+}
+
 export default function AdminLogsPage() {
-  const { notifyError } = useNotification();
   const navigate = useNavigate();
+  const { notifyError } = useNotification();
 
   const [me, setMe] = useState<Pyrotechnician | null>(null);
   const [checkingMe, setCheckingMe] = useState(true);
 
   const [tab, setTab] = useState<TabKey>("logins");
 
-  // login events
-  const [loginEvents, setLoginEvents] = useState<LoginEvent[]>([]);
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
+  // login filters (inputs)
   const [loginEmail, setLoginEmail] = useState("");
-  const [loginSuccessFilter, setLoginSuccessFilter] = useState<"all" | "success" | "fail">("all");
+  const [loginSuccessFilter, setLoginSuccessFilter] =
+    useState<LoginSuccessFilter>("all");
   const [loginDateFrom, setLoginDateFrom] = useState("");
   const [loginDateTo, setLoginDateTo] = useState("");
 
-  // audit logs
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditError, setAuditError] = useState<string | null>(null);
+  // applied login filters (для React Query)
+  const [loginFilters, setLoginFilters] = useState<LoginFilters>({
+    email: "",
+    success: "all",
+    date_from: null,
+    date_to: null,
+  });
+
+  // audit filters (inputs)
   const [auditAction, setAuditAction] = useState("");
   const [auditDateFrom, setAuditDateFrom] = useState("");
   const [auditDateTo, setAuditDateTo] = useState("");
 
-  const abortRef = useRef<AbortController | null>(null);
+  // applied audit filters
+  const [auditFilters, setAuditFilters] = useState<AuditFilters>({
+    action: "",
+    date_from: null,
+    date_to: null,
+  });
 
   // проверяем, что пользователь — админ
   useEffect(() => {
@@ -87,7 +110,9 @@ export default function AdminLogsPage() {
         }
       } catch (e: any) {
         if (!cancelled) {
-          notifyError("Не удалось определить текущего пользователя, требуется вход.");
+          notifyError(
+            "Не удалось определить текущего пользователя, требуется вход."
+          );
           navigate("/login");
         }
       } finally {
@@ -100,85 +125,87 @@ export default function AdminLogsPage() {
     };
   }, [navigate, notifyError]);
 
-  const cancelPending = () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-  };
+  // --- React Query: журнал входов ---
 
-  const loadLoginEvents = async () => {
-    cancelPending();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setLoginLoading(true);
-    setLoginError(null);
-
-    try {
-      const success =
-        loginSuccessFilter === "all"
+  const {
+    data: loginEvents = [],
+    isLoading: isLoginInitialLoading,
+    isFetching: isLoginFetching,
+    isError: isLoginError,
+    error: loginError,
+    refetch: refetchLoginEvents,
+  } = useQuery<LoginEvent[], any>({
+    queryKey: ["admin-login-events", loginFilters],
+    queryFn: ({ signal }) => {
+      const successValue =
+        loginFilters.success === "all"
           ? undefined
-          : loginSuccessFilter === "success";
+          : loginFilters.success === "success";
 
-      const data = await fetchLoginEvents(
+      return fetchLoginEvents(
         {
-          email: loginEmail || null,
-          success,
-          date_from: loginDateFrom || null,
-          date_to: loginDateTo || null,
+          email: loginFilters.email || null,
+          success: successValue,
+          date_from: loginFilters.date_from,
+          date_to: loginFilters.date_to,
         },
-        { signal: controller.signal },
+        { signal }
       );
-      setLoginEvents(data);
-    } catch (e: any) {
-      if (isCanceled(e)) return;
+    },
+    enabled: !!me?.is_admin && tab === "logins",
+    onError: (e: any) => {
       const msg = e?.message || "Не удалось загрузить журнал входов.";
-      setLoginError(msg);
       notifyError(msg);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
+    },
+  });
 
-  const loadAuditLogs = async () => {
-    cancelPending();
-    const controller = new AbortController();
-    abortRef.current = controller;
+  const loginLoading = isLoginInitialLoading || isLoginFetching;
 
-    setAuditLoading(true);
-    setAuditError(null);
+  // --- React Query: аудит-лог ---
 
-    try {
-      const data = await fetchAuditLogs(
+  const {
+    data: auditLogs = [],
+    isLoading: isAuditInitialLoading,
+    isFetching: isAuditFetching,
+    isError: isAuditError,
+    error: auditError,
+    refetch: refetchAuditLogs,
+  } = useQuery<AuditLogEntry[], any>({
+    queryKey: ["admin-audit-logs", auditFilters],
+    queryFn: ({ signal }) =>
+      fetchAuditLogs(
         {
-          action: auditAction || null,
-          date_from: auditDateFrom || null,
-          date_to: auditDateTo || null,
+          action: auditFilters.action || null,
+          date_from: auditFilters.date_from,
+          date_to: auditFilters.date_to,
         },
-        { signal: controller.signal },
-      );
-      setAuditLogs(data);
-    } catch (e: any) {
-      if (isCanceled(e)) return;
+        { signal }
+      ),
+    enabled: !!me?.is_admin && tab === "audit",
+    onError: (e: any) => {
       const msg = e?.message || "Не удалось загрузить аудит-лог.";
-      setAuditError(msg);
       notifyError(msg);
-    } finally {
-      setAuditLoading(false);
-    }
+    },
+  });
+
+  const auditLoading = isAuditInitialLoading || isAuditFetching;
+
+  const handleApplyLoginFilters = () => {
+    setLoginFilters({
+      email: loginEmail.trim(),
+      success: loginSuccessFilter,
+      date_from: loginDateFrom || null,
+      date_to: loginDateTo || null,
+    });
   };
 
-  useEffect(() => {
-    if (!checkingMe && me?.is_admin) {
-      // по умолчанию грузим логины
-      loadLoginEvents();
-    }
-
-    return () => {
-      cancelPending();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkingMe, me]);
+  const handleApplyAuditFilters = () => {
+    setAuditFilters({
+      action: auditAction.trim(),
+      date_from: auditDateFrom || null,
+      date_to: auditDateTo || null,
+    });
+  };
 
   if (checkingMe) {
     return (
@@ -199,7 +226,7 @@ export default function AdminLogsPage() {
         <Stack direction="row" spacing={2} alignItems="center" mb={2}>
           <Typography variant="h6">Журнал входов</Typography>
           <Tooltip title="Обновить">
-            <IconButton onClick={loadLoginEvents} disabled={loginLoading}>
+            <IconButton onClick={() => refetchLoginEvents()} disabled={loginLoading}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>
@@ -212,7 +239,7 @@ export default function AdminLogsPage() {
           mb={2}
         >
           <TextField
-            label="E-mail"
+            label="Email"
             value={loginEmail}
             onChange={(e) => setLoginEmail(e.target.value)}
             size="small"
@@ -222,7 +249,9 @@ export default function AdminLogsPage() {
             select
             value={loginSuccessFilter}
             onChange={(e) =>
-              setLoginSuccessFilter(e.target.value as "all" | "success" | "fail")
+              setLoginSuccessFilter(
+                e.target.value as LoginSuccessFilter
+              )
             }
             size="small"
             SelectProps={{ native: true }}
@@ -249,16 +278,17 @@ export default function AdminLogsPage() {
           />
           <Button
             variant="outlined"
-            onClick={loadLoginEvents}
+            onClick={handleApplyLoginFilters}
             disabled={loginLoading}
           >
             Применить
           </Button>
         </Stack>
 
-        {loginError && (
+        {isLoginError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {loginError}
+            {(loginError as any)?.message ||
+              "Не удалось загрузить журнал входов."}
           </Alert>
         )}
 
@@ -302,11 +332,19 @@ export default function AdminLogsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={e.success ? "Успешно" : "Ошибка"}
-                        color={e.success ? "success" : "error"}
-                        size="small"
-                      />
+                      {e.success ? (
+                        <Chip
+                          label="Успешно"
+                          color="success"
+                          size="small"
+                        />
+                      ) : (
+                        <Chip
+                          label="Ошибка"
+                          color="error"
+                          size="small"
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -322,9 +360,9 @@ export default function AdminLogsPage() {
     <Card variant="outlined">
       <CardContent>
         <Stack direction="row" spacing={2} alignItems="center" mb={2}>
-          <Typography variant="h6">Аудит-лог</Typography>
+          <Typography variant="h6">Аудит действий</Typography>
           <Tooltip title="Обновить">
-            <IconButton onClick={loadAuditLogs} disabled={auditLoading}>
+            <IconButton onClick={() => refetchAuditLogs()} disabled={auditLoading}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>
@@ -360,16 +398,17 @@ export default function AdminLogsPage() {
           />
           <Button
             variant="outlined"
-            onClick={loadAuditLogs}
+            onClick={handleApplyAuditFilters}
             disabled={auditLoading}
           >
             Применить
           </Button>
         </Stack>
 
-        {auditError && (
+        {isAuditError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {auditError}
+            {(auditError as any)?.message ||
+              "Не удалось загрузить аудит-лог."}
           </Alert>
         )}
 
@@ -433,13 +472,16 @@ export default function AdminLogsPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1} alignItems="center" mb={2}>
-        <SecurityIcon color="primary" />
-        <Typography variant="h5">Журналы безопасности</Typography>
-      </Stack>
+      <PageHeader
+        title="Журналы входов и действий"
+        subtitle="Отслеживание входов пользователей и основных действий в системе."
+      />
 
-      <Card variant="outlined" sx={{ mb: 3 }}>
-        <CardContent>
+      <Card
+        variant="outlined"
+        sx={{ mb: 2, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
+      >
+        <CardContent sx={{ pb: 0 }}>
           <Tabs
             value={tab}
             onChange={(_, v: TabKey) => setTab(v)}

@@ -1,13 +1,30 @@
 // frontend/src/App.tsx
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import {
   Routes,
   Route,
-  Link as RouterLink,
+  Navigate,
   useLocation,
   useNavigate,
-  Navigate,
 } from "react-router-dom";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Box,
+  CssBaseline,
+  IconButton,
+  Badge,
+  Tooltip,
+  Button,
+  Chip,
+  useMediaQuery,
+  useTheme,
+} from "@mui/material";
+import MenuIcon from "@mui/icons-material/Menu";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import NotificationsIcon from "@mui/icons-material/Notifications";
+import LogoutIcon from "@mui/icons-material/Logout";
 
 import StaffAndStructurePage from "./pages/StaffAndStructurePage";
 import ZonesPage from "./pages/ZonesPage";
@@ -22,73 +39,58 @@ import AdminPage from "./pages/AdminPage";
 import AdminLogsPage from "./pages/AdminLogsPage";
 
 import { RequireAuth, useAuth } from "./auth/AuthProvider";
-
-import {
-  AppBar,
-  Toolbar,
-  Typography,
-  Box,
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  CssBaseline,
-  IconButton,
-  Badge,
-  Tooltip,
-  Button,
-  Chip,
-} from "@mui/material";
-
-import PublicIcon from "@mui/icons-material/Public";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import MapIcon from "@mui/icons-material/Map";
-import AssessmentIcon from "@mui/icons-material/Assessment";
-import NotificationsIcon from "@mui/icons-material/Notifications";
-import DescriptionIcon from "@mui/icons-material/Description";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
-import SecurityIcon from "@mui/icons-material/Security";
-
-import { fetchNotifications } from "./services/api";
-import type { Notification } from "./types";
+import Sidebar from "./components/Sidebar";
 import NotificationsPopover from "./components/NotificationsPopover";
 
-const drawerWidth = 240;
+/** ──────────────────────────────────────────────────────────────────────
+ * ЛЁГКИЙ виджет уведомлений (мемоизирован), чтобы не ререндерить весь App
+ * ────────────────────────────────────────────────────────────────────── */
+import { memo, useState } from "react"; // <--- ИЗМЕНЕНИЕ: Убрали useEffect
+import { useQuery } from "@tanstack/react-query"; // <--- ИЗМЕНЕНИЕ: Добавили импорт useQuery
+import { fetchNotifications } from "./services/api";
+import type { Notification } from "./types";
 
-type NavItem = {
-  text: string;
-  path: string;
-  icon: JSX.Element;
-};
+// <--- ИЗМЕНЕНИЕ: Вся логика виджета переписана на useQuery
+const NotificationsWidget = memo(function NotificationsWidget({
+  onOpen,
+}: {
+  onOpen: (e: React.MouseEvent<HTMLElement>) => void;
+}) {
+  // Используем useQuery для загрузки и периодического обновления данных.
+  // Это надежный способ, который не вызывает "шторм" запросов.
+  const { data: notifications = [] } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: fetchNotifications,
+    // При желании можно включить авто-обновление раз в 30 секунд.
+    // Сначала убедимся, что все работает стабильно.
+    // refetchInterval: 30000,
+  });
 
-const navItems: NavItem[] = [
-  { text: "Оперативная карта", path: "/", icon: <MapIcon /> },
-  { text: "Рабочие зоны", path: "/zones", icon: <PublicIcon /> },
-  { text: "Отчеты", path: "/reports", icon: <AssessmentIcon /> },
-  { text: "Документы", path: "/documents", icon: <DescriptionIcon /> },
-];
+  const unread = useMemo(
+    () => notifications.filter((n) => !n.is_read).length,
+    [notifications]
+  );
 
-function isItemActive(currentPath: string, item: NavItem) {
-  if (item.path === "/") {
-    return currentPath === "/";
-  }
-  return currentPath.startsWith(item.path);
-}
+  return (
+    <Tooltip title="Уведомления">
+      <IconButton color="inherit" onClick={onOpen}>
+        <Badge badgeContent={unread} color="error">
+          <NotificationsIcon />
+        </Badge>
+      </IconButton>
+    </Tooltip>
+  );
+});
+
+const MINI_WIDTH = 72;
 
 // Только для администратора
 function RequireAdmin({ children }: { children: JSX.Element }) {
   const { user } = useAuth();
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
+  if (!user) return <Navigate to="/login" replace />;
   if (!user.is_admin) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: { xs: 2, sm: 3 } }}>
         <Typography variant="h5" gutterBottom>
           Доступ запрещён
         </Typography>
@@ -98,111 +100,30 @@ function RequireAdmin({ children }: { children: JSX.Element }) {
       </Box>
     );
   }
-
   return children;
 }
 
 export default function App() {
+  const theme = useTheme();
+  const mdUp = useMediaQuery(theme.breakpoints.up("md"));
+  const smUp = useMediaQuery(theme.breakpoints.up("sm"));
+
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  // --- Уведомления ---
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  // popover для уведомлений (сам список рисует NotificationsPopover)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
-
-  const loadNotifications = async () => {
-    try {
-      const data = await fetchNotifications();
-      setNotifications(data);
-    } catch (e) {
-      console.error("Failed to fetch notifications:", e);
-    }
-  };
-
-  useEffect(() => {
-    if (!user) return;
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
-  }, [user]);
-
-  const handleOpenPopover = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClosePopover = () => {
-    setAnchorEl(null);
-  };
-
-  const handleMarkAsRead = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
-    );
-  };
+  const handleOpenPopover = (e: React.MouseEvent<HTMLElement>) =>
+    setAnchorEl(e.currentTarget);
+  const handleClosePopover = () => setAnchorEl(null);
 
   const handleLogout = () => {
     logout();
     navigate("/login", { replace: true });
   };
 
-  const drawer = (
-    <Box>
-      <Toolbar />
-      <Divider />
-      <List>
-        {navItems.map((item) => {
-          const selected = isItemActive(location.pathname, item);
-          return (
-            <ListItem key={item.text} disablePadding>
-              <ListItemButton
-                component={RouterLink}
-                to={item.path}
-                selected={selected}
-              >
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItemButton>
-            </ListItem>
-          );
-        })}
-
-        {user?.is_admin && (
-          <>
-            <Divider sx={{ mt: 1, mb: 1 }} />
-            <ListItem disablePadding>
-              <ListItemButton
-                component={RouterLink}
-                to="/admin"
-                selected={location.pathname === "/admin"}
-              >
-                <ListItemIcon>
-                  <AdminPanelSettingsIcon />
-                </ListItemIcon>
-                <ListItemText primary="Администрирование" />
-              </ListItemButton>
-            </ListItem>
-            <ListItem disablePadding>
-              <ListItemButton
-                component={RouterLink}
-                to="/admin/logs"
-                selected={location.pathname.startsWith("/admin/logs")}
-              >
-                <ListItemIcon>
-                  <SecurityIcon />
-                </ListItemIcon>
-                <ListItemText primary="Журналы безопасности" />
-              </ListItemButton>
-            </ListItem>
-          </>
-        )}
-      </List>
-    </Box>
-  );
-
-  // Для страницы логина — без AppBar/Drawer
+  // отдельный рендер страницы логина — без AppBar/Sidebar
   if (location.pathname === "/login") {
     return (
       <Box sx={{ display: "flex" }}>
@@ -215,28 +136,54 @@ export default function App() {
     );
   }
 
+  // мобильный сайдбар
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const toggleMobile = () => setMobileOpen((v) => !v);
+
   return (
-    <Box sx={{ display: "flex" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <CssBaseline />
+
       <AppBar
         position="fixed"
         color="primary"
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        sx={{ zIndex: (t) => t.zIndex.drawer + 1, overflow: "hidden" }}
       >
-        <Toolbar>
-          <DashboardIcon sx={{ mr: 2 }} />
+        <Toolbar sx={{ minHeight: { xs: 56, sm: 64 }, overflow: "hidden" }}>
+          {!mdUp && (
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={toggleMobile}
+              sx={{ mr: 1 }}
+              aria-label="Открыть меню"
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+
+          <DashboardIcon sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }} />
           <Typography
-            variant="h6"
+            variant={smUp ? "h6" : "subtitle1"}
             noWrap
-            component="div"
-            sx={{ flexGrow: 1 }}
+            sx={{
+              flexGrow: 1,
+              fontWeight: 700,
+              maxWidth: { xs: "60vw", sm: "unset" },
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
           >
             МЧС | Единое рабочее пространство
           </Typography>
 
           {user && (
             <>
-              <Typography variant="body2" sx={{ mr: 2 }}>
+              <Typography
+                variant="body2"
+                sx={{ mr: 2, display: { xs: "none", sm: "block" } }}
+              >
                 {user.full_name}
               </Typography>
               {user.is_admin && (
@@ -244,53 +191,48 @@ export default function App() {
                   label="Администратор"
                   size="small"
                   color="secondary"
-                  sx={{ mr: 2 }}
+                  sx={{ mr: 2, display: { xs: "none", sm: "inline-flex" } }}
                 />
               )}
             </>
           )}
 
-          <Tooltip title="Уведомления">
-            <IconButton
-              color="inherit"
-              onClick={handleOpenPopover}
-              sx={{ mr: 1 }}
-            >
-              <Badge badgeContent={unreadCount} color="error">
-                <NotificationsIcon />
-              </Badge>
-            </IconButton>
-          </Tooltip>
+          {/* Мемокомпонент – не триггерит ререндер всего App */}
+          <NotificationsWidget onOpen={handleOpenPopover} />
 
-          <Button color="inherit" onClick={handleLogout}>
-            Выйти
-          </Button>
+          {smUp ? (
+            <Button color="inherit" onClick={handleLogout}>
+              Выйти
+            </Button>
+          ) : (
+            <Tooltip title="Выйти">
+              <IconButton color="inherit" onClick={handleLogout} aria-label="Выйти">
+                <LogoutIcon />
+              </IconButton>
+            </Tooltip>
+          )}
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          "& .MuiDrawer-paper": {
-            width: drawerWidth,
-            boxSizing: "border-box",
-          },
-        }}
-      >
-        {drawer}
-      </Drawer>
+      {/* Левое меню: мини на десктопе, выезжающее на мобиле */}
+      <Sidebar
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+        isAdmin={!!user?.is_admin}
+      />
 
+      {/* Контент. Отступ слева под мини-меню + спейсер под AppBar */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
-          width: `calc(100% - ${drawerWidth}px)`,
+          px: { xs: 1.5, md: 3 },
+          py: { xs: 2, md: 3 },
+          ml: { xs: 0, md: `${MINI_WIDTH}px` },
         }}
       >
-        <Toolbar />
+        {/* Spacer под шапку — точно равен высоте Toolbar */}
+        <Toolbar sx={{ minHeight: { xs: 56, sm: 64 } }} />
 
         <Routes>
           <Route
@@ -381,12 +323,12 @@ export default function App() {
             path="*"
             element={
               <RequireAuth>
-                <Box>
+                <Box sx={{ p: { xs: 1, sm: 0 } }}>
                   <Typography variant="h5" gutterBottom>
                     Страница не найдена
                   </Typography>
                   <Typography color="text.secondary">
-                    Проверьте адрес или выберите раздел в левом меню.
+                    Проверьте адрес или выберите раздел в меню слева.
                   </Typography>
                 </Box>
               </RequireAuth>
@@ -395,11 +337,12 @@ export default function App() {
         </Routes>
       </Box>
 
+      {/* Popover оставляем как есть — он не влияет на рендер Routes */}
       <NotificationsPopover
-        notifications={notifications}
+        notifications={[]} // сам список подгружает внутри попапа (если нужно — можешь переиспользовать NotificationsWidget state)
         anchorEl={anchorEl}
         onClose={handleClosePopover}
-        onMarkAsRead={handleMarkAsRead}
+        onMarkAsRead={() => {}}
       />
     </Box>
   );

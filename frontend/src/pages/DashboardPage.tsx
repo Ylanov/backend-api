@@ -15,7 +15,6 @@ import {
   Divider,
   Chip,
 } from "@mui/material";
-import MapIcon from "@mui/icons-material/Map";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
 import CloseIcon from "@mui/icons-material/Close";
@@ -23,10 +22,16 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { YMaps, Map, Polygon, Placemark } from "@pbe/react-yandex-maps";
 import { useQuery } from "@tanstack/react-query";
 
-import type { Task, Zone, ZoneWithTasks } from "../types";
+import type { Task, Zone, ZoneWithTasks, Team } from "../types";
 import { TaskStatus } from "../types";
-import { fetchTasks, fetchTeams, fetchZones, fetchZoneDetails } from "../services/api";
+import {
+  fetchTasks,
+  fetchTeams,
+  fetchZones,
+  fetchZoneDetails,
+} from "../services/api";
 import { useAuth } from "../auth/AuthProvider";
+import PageHeader from "../components/PageHeader";
 
 // --- Вспомогательные компоненты ---
 
@@ -82,7 +87,7 @@ const ZoneInfoPanel = ({ zoneId }: { zoneId: number }) => {
     error,
   } = useQuery<ZoneWithTasks>({
     queryKey: ["zoneDetails", zoneId],
-    queryFn: fetchZoneDetails,
+    queryFn: fetchZoneDetails, // ВАЖНО: даём саму функцию, а не вызываем её
     enabled: !!zoneId,
   });
 
@@ -117,7 +122,7 @@ const ZoneInfoPanel = ({ zoneId }: { zoneId: number }) => {
 
       {tasks.length > 0 ? (
         <Stack spacing={1}>
-          {tasks.map((task) => (
+          {tasks.map((task: Task) => (
             <Link component={RouterLink} to={`/tasks/${task.id}`} key={task.id}>
               {task.title}
             </Link>
@@ -188,37 +193,35 @@ export default function DashboardPage() {
     null
   );
 
+  // Три независимых запроса. Здесь react-query сам передаёт контекст в fetchXXX.
   const {
     data: tasks = [],
-    isLoading: isLoadingTasks,
+    isLoading: isTasksLoading,
     error: tasksError,
-  } = useQuery({
+  } = useQuery<Task[]>({
     queryKey: ["tasks"],
     queryFn: fetchTasks,
-    initialData: [],
   });
 
   const {
     data: teams = [],
-    isLoading: isLoadingTeams,
+    isLoading: isTeamsLoading,
     error: teamsError,
-  } = useQuery({
+  } = useQuery<Team[]>({
     queryKey: ["teams"],
     queryFn: fetchTeams,
-    initialData: [],
   });
 
   const {
     data: zones = [],
-    isLoading: isLoadingZones,
+    isLoading: isZonesLoading,
     error: zonesError,
-  } = useQuery({
+  } = useQuery<Zone[]>({
     queryKey: ["zones"],
     queryFn: fetchZones,
-    initialData: [],
   });
 
-  const isLoading = isLoadingTasks || isLoadingTeams || isLoadingZones;
+  const isLoading = isTasksLoading || isTeamsLoading || isZonesLoading;
   const error = tasksError || teamsError || zonesError;
 
   const stats = useMemo(() => {
@@ -229,7 +232,7 @@ export default function DashboardPage() {
     const assignedTeamIds = new Set(
       tasks
         .filter((t) => t.status === TaskStatus.IN_PROGRESS && t.team_id)
-        .map((t) => t.team_id)
+        .map((t) => t.team_id as number)
     );
 
     const freeTeams = teams.filter((t) => !assignedTeamIds.has(t.id)).length;
@@ -257,10 +260,10 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} alignItems="center" mb={2}>
-        <MapIcon fontSize="large" />
-        <Typography variant="h4">Оперативная карта</Typography>
-      </Stack>
+      <PageHeader
+        title="Оперативная карта"
+        subtitle="Статусы задач, команды и зоны на карте"
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -272,7 +275,9 @@ export default function DashboardPage() {
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Задач в работе"
-            value={isLoading ? <CircularProgress size={30} /> : stats.tasksInProgress}
+            value={
+              isLoading ? <CircularProgress size={30} /> : stats.tasksInProgress
+            }
             icon={<AssignmentTurnedInIcon sx={{ fontSize: 40 }} />}
             color="warning.main"
             to="/tasks"
@@ -281,7 +286,9 @@ export default function DashboardPage() {
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Свободных команд"
-            value={isLoading ? <CircularProgress size={30} /> : stats.freeTeams}
+            value={
+              isLoading ? <CircularProgress size={30} /> : stats.freeTeams
+            }
             icon={<PeopleOutlineIcon sx={{ fontSize: 40 }} />}
             color="success.main"
             to="/structure"

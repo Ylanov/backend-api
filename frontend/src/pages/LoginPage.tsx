@@ -1,5 +1,5 @@
 // frontend/src/pages/LoginPage.tsx
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState, useEffect } from "react";
 import {
   Box,
   Paper,
@@ -17,13 +17,15 @@ import { useNotification } from "../notifications/NotificationProvider";
 import { firstChangePassword, login } from "../services/api";
 
 export default function LoginPage() {
-  const { setTokenAndUser } = useAuth(); // Предполагается, что в AuthProvider есть такой метод
+  const { setTokenAndUser } = useAuth();
   const { notifyError, notifySuccess } = useNotification();
   const navigate = useNavigate();
   const location = useLocation() as any;
 
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState(""); // Используется как временный пароль на втором шаге
+  const [password, setPassword] = useState(""); // временный пароль на втором шаге
 
   // Состояния для второго шага (смена пароля)
   const [mustChangePassword, setMustChangePassword] = useState(false);
@@ -34,6 +36,11 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   const from = location.state?.from?.pathname || "/";
+
+  useEffect(() => {
+    // автофокус на e-mail при открытии страницы
+    emailInputRef.current?.focus();
+  }, []);
 
   const handleLoginSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,14 +54,12 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const token = await login({ email: email.trim(), password });
-      // Обычный успешный вход
       await setTokenAndUser(token.access_token);
       navigate(from, { replace: true });
     } catch (err: any) {
       const status = err?.status;
       const detail = err?.responseData?.detail || err?.message;
 
-      // Ключевая логика: если бэкенд требует смены пароля
       if (status === 403 && detail === "PASSWORD_CHANGE_REQUIRED") {
         setMustChangePassword(true);
         setError("Необходимо сменить временный пароль перед первым входом.");
@@ -94,7 +99,6 @@ export default function LoginPage() {
       await setTokenAndUser(token.access_token);
       notifySuccess("Пароль успешно изменён!");
       navigate(from, { replace: true });
-
     } catch (err: any) {
       const detail = err?.responseData?.detail || err?.message;
       setError(detail || "Ошибка смены пароля");
@@ -114,10 +118,10 @@ export default function LoginPage() {
         p: 2,
       }}
     >
-      <Paper sx={{ p: 4, width: "100%", maxWidth: 420 }}>
+      <Paper sx={{ p: 4, width: "100%", maxWidth: 420 }} component="section" aria-label="Форма входа">
         <Stack spacing={2}>
           <Stack direction="row" spacing={1.5} alignItems="center" mb={1}>
-            <LockOpenIcon color="primary" sx={{ fontSize: 32 }} />
+            <LockOpenIcon color="primary" sx={{ fontSize: 32 }} aria-hidden />
             <Box>
               <Typography variant="h5">
                 {mustChangePassword ? "Смена пароля" : "Вход в систему"}
@@ -137,9 +141,11 @@ export default function LoginPage() {
             onSubmit={
               mustChangePassword ? handleFirstChangeSubmit : handleLoginSubmit
             }
+            noValidate
           >
             <Stack spacing={2}>
               <TextField
+                inputRef={emailInputRef}
                 label="E-mail (логин)"
                 type="email"
                 value={email}
@@ -155,9 +161,9 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 fullWidth
-                autoComplete="current-password"
-                disabled={loading}
+                autoComplete={mustChangePassword ? "current-password" : "current-password"}
                 required
+                disabled={loading}
               />
 
               {mustChangePassword && (
@@ -169,8 +175,8 @@ export default function LoginPage() {
                     onChange={(e) => setNewPassword(e.target.value)}
                     fullWidth
                     autoComplete="new-password"
-                    disabled={loading}
                     required
+                    disabled={loading}
                   />
                   <TextField
                     label="Подтвердите новый пароль"
@@ -179,8 +185,8 @@ export default function LoginPage() {
                     onChange={(e) => setNewPasswordRepeat(e.target.value)}
                     fullWidth
                     autoComplete="new-password"
-                    disabled={loading}
                     required
+                    disabled={loading}
                   />
                 </>
               )}
@@ -190,10 +196,13 @@ export default function LoginPage() {
                 variant="contained"
                 size="large"
                 disabled={loading}
+                aria-label={mustChangePassword ? "Сменить пароль и войти" : "Войти"}
               >
                 {loading
                   ? "Обработка..."
-                  : (mustChangePassword ? "Сменить пароль и войти" : "Войти")}
+                  : mustChangePassword
+                  ? "Сменить пароль и войти"
+                  : "Войти"}
               </Button>
             </Stack>
           </Box>

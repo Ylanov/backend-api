@@ -7,7 +7,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import FileResponse
-from starlette.requests import Request
+# Убираем неиспользуемый Request
+# from starlette.requests import Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,22 +32,24 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.get("", response_model=List[DocumentOut])
 async def list_documents(
-    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Document).order_by(Document.uploaded_at.desc()))
     docs = list(result.scalars().all())
 
-    base_url = str(request.base_url).rstrip("/")
-    for d in docs:
-        d.download_url = f"{base_url}/api/documents/{d.id}/download"
+    # --- ЭТОТ БЛОК НУЖНО ПОЛНОСТЬЮ УДАЛИТЬ ---
+    # base_url = str(request.base_url).rstrip("/")
+    # for d in docs:
+    #     d.download_url = f"{base_url}/api/documents/{d.id}/download"
+    # ---------------------------------------------
 
     return docs
 
 
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
-    request: Request,
+    # Убираем неиспользуемый Request
+    # request: Request,
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
@@ -114,13 +117,16 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
-    # Добавляем URL в объект и возвращаем сам объект
-    base_url = str(request.base_url).rstrip("/")
-    doc.download_url = f"{base_url}/api/documents/{doc.id}/download"
+    # --- ЭТИ СТРОКИ НУЖНО УДАЛИТЬ ---
+    # base_url = str(request.base_url).rstrip("/")
+    # doc.download_url = f"{base_url}/api/documents/{doc.id}/download"
+    # -----------------------------------
 
     return doc
 
 
+# Эндпоинт для скачивания можно оставить, он может быть полезен,
+# но фронтенд его больше не использует для отображения списка
 @router.get("/{doc_id}/download")
 async def download_document(
     doc_id: int,

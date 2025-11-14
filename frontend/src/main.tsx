@@ -1,59 +1,78 @@
-// frontend/src/main.tsx
-import React from "react";
+// src/main.tsx
+import React, { useMemo, useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { ThemeProvider, CssBaseline, createTheme } from "@mui/material";
+import { ThemeProvider, CssBaseline } from "@mui/material";
 
-// Календарь (MUI X Date Pickers)
+// MUI X Date Pickers
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import ru from "date-fns/locale/ru";
 
-// 1. ИМПОРТИРУЕМ КОМПОНЕНТЫ REACT QUERY
+// React Query
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+// Наша тема
+import { makeTheme, type ThemeMode } from "./lib/theme";
+
+// Приложение и провайдеры (ВАЖНО: именованные импорты)
 import App from "./App";
 import { NotificationProvider } from "./notifications/NotificationProvider";
 import { AuthProvider } from "./auth/AuthProvider";
 
-const theme = createTheme({
-  palette: {
-    mode: "light",
-    primary: {
-      main: "#1976d2",
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
     },
-    secondary: {
-      main: "#9c27b0",
-    },
-    background: {
-      default: "#f5f5f7",
-      paper: "#ffffff",
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto","Helvetica","Arial",sans-serif',
+    mutations: { retry: 0 },
   },
 });
 
-// 2. СОЗДАЕМ ЭКЗЕМПЛЯР КЛИЕНТА
-const queryClient = new QueryClient();
+const THEME_STORAGE_KEY = "theme-mode";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
+function Root() {
+  const [mode, setMode] = useState<ThemeMode>("light");
+
+  useEffect(() => {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+    if (saved === "dark" || saved === "light") setMode(saved);
+  }, []);
+
+  const theme = useMemo(() => makeTheme(mode), [mode]);
+
+  // Если захочешь переключатель темы в UI — прокинь toggleTheme в App
+  const toggleTheme = () => {
+    setMode((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+      return next;
+    });
+  };
+
+  return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ru}>
         <BrowserRouter>
-          {/* 3. ОБЕРАЧИВАЕМ ПРИЛОЖЕНИЕ В ПРОВАЙДЕР */}
           <QueryClientProvider client={queryClient}>
             <NotificationProvider>
               <AuthProvider>
-                <App />
+                <App /* toggleTheme={toggleTheme} */ />
               </AuthProvider>
             </NotificationProvider>
           </QueryClientProvider>
         </BrowserRouter>
       </LocalizationProvider>
     </ThemeProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <Root />
   </React.StrictMode>
 );

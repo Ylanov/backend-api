@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Ставим зависимости
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* .npmrc* ./
-RUN npm ci || npm install
+RUN npm install --legacy-peer-deps
 
 # Копируем код и билдим
 COPY . .

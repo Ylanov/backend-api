@@ -7,7 +7,7 @@ import type {
   Pyrotechnician,
   PyrotechnicianCreate,
   PyrotechnicianUpdate,
-  PyrotechnicianFlagsUpdate, // <-- Новый импорт
+  PyrotechnicianFlagsUpdate,
   Team,
   TeamCreate,
   TeamPatch,
@@ -25,8 +25,9 @@ import type {
   LoginEvent,
   AuditLogEntry,
   AdminSetPasswordResponse,
-  FirstPasswordChangeRequest, // <-- Новый импорт
-  Token, // <-- Новый импорт
+  FirstPasswordChangeRequest,
+  Token,
+  DashboardStats, // <--- ДОБАВЛЕН ИМПОРТ
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -48,7 +49,7 @@ export function getStoredToken(): string | null {
   }
 }
 
-type QueryFnContext = {
+export type QueryFnContext = {
   signal?: AbortSignal;
   queryKey?: readonly (string | number)[];
 };
@@ -104,13 +105,11 @@ export const updatePyrotechnician = (id: number, payload: PyrotechnicianUpdate) 
     body: JSON.stringify(payload),
   });
 
-// --- НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ФЛАГОВ ---
 export const updatePyrotechnicianFlags = (id: number, payload: PyrotechnicianFlagsUpdate) =>
   request<Pyrotechnician>(`${BASE_URL}/pyrotechnicians/${id}/flags`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
-// ----------------------------------------
 
 export const deletePyrotechnician = (id: number) =>
   request<void>(`${BASE_URL}/pyrotechnicians/${id}`, { method: "DELETE" });
@@ -374,16 +373,21 @@ export const login = (payload: LoginRequest) =>
     body: JSON.stringify(payload),
   });
 
-// --- НОВАЯ ФУНКЦИЯ ДЛЯ СМЕНЫ ПАРОЛЯ ПРИ ПЕРВОМ ВХОДЕ ---
 export const firstChangePassword = (payload: FirstPasswordChangeRequest) =>
   request<Token>(`${BASE_URL}/auth/first-change-password`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
-// ----------------------------------------------------
 
 export const getMe = ({ signal }: QueryFnContext = {}) =>
   request<Pyrotechnician>(`${BASE_URL}/auth/me`, { signal });
+
+
+// --- Dashboard ---
+
+export const fetchDashboardStats = ({ signal }: QueryFnContext = {}) =>
+  request<DashboardStats>(`${BASE_URL}/dashboard/stats`, { signal });
+
 
 // --- Утилита ---
 

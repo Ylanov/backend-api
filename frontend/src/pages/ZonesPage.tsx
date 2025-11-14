@@ -29,12 +29,12 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
-import PublicIcon from "@mui/icons-material/Public";
 import SearchIcon from "@mui/icons-material/Search";
 
 import { YMaps, Map, Polygon } from "@pbe/react-yandex-maps";
 import ZoneDialog from "../components/ZoneDialog";
 import { useNotification } from "../notifications/NotificationProvider";
+import PageHeader from "../components/PageHeader";
 
 function isValidCoordinate(value: unknown): value is number {
   return typeof value === "number" && !Number.isNaN(value);
@@ -210,30 +210,19 @@ export default function ZonesPage() {
 
   return (
     <Box>
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={2}
-      >
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <PublicIcon fontSize="large" />
-          <Box>
-            <Typography variant="h4">Рабочие зоны</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Зон: {zones.length} · Точек в сумме: {totalPoints}
-            </Typography>
-          </Box>
-        </Stack>
-
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleOpenCreateDialog}
-        >
-          Добавить зону
-        </Button>
-      </Stack>
+      <PageHeader
+        title="Рабочие зоны"
+        subtitle={`Зон: ${zones.length} · Точек в сумме: ${totalPoints}`}
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleOpenCreateDialog}
+          >
+            Добавить зону
+          </Button>
+        }
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
