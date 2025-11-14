@@ -12,3 +12,4 @@ passlib[bcrypt]
 pydantic-settings
 prometheus-fastapi-instrumentator
 httpx
+aiofiles

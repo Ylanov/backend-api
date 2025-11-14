@@ -31,7 +31,7 @@ from app.models import (
 )
 from app.schemas import TaskComment as TaskCommentOut
 from app.security import get_current_pyro
-
+import aiofiles
 router = APIRouter(
     prefix="/tasks",
     tags=["task-comments"],
@@ -124,8 +124,9 @@ async def _process_and_validate_attachment(file: UploadFile) -> TaskAttachment:
     unique_name = f"{uuid.uuid4()}{file_ext}"
     save_path = UPLOAD_DIR / unique_name
 
-    with open(save_path, "wb") as buffer:
-        buffer.write(content)
+    # --- АСИНХРОННАЯ ЗАПИСЬ ФАЙЛА ---
+    async with aiofiles.open(save_path, "wb") as buffer:
+        await buffer.write(content)
 
     return TaskAttachment(
         file_name=file.filename,
