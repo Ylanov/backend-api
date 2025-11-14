@@ -20,10 +20,11 @@ from sqlalchemy.sql import func
 from .database import Base
 
 
-# --- КОНСТАНТЫ ДЛЯ FK И ON DELETE (убираем дубли строк) ---
+# --- КОНСТАНТЫ ДЛЯ FK, ON DELETE И CASCADE (убираем дубли строк) ---
 
 PYROTECHNICIAN_FK_TARGET = "pyrotechnicians.id"
 ONDELETE_SET_NULL = "SET NULL"
+CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
 
 # --- ENUM-ТИПЫ ---
@@ -80,13 +81,13 @@ class OrganizationUnit(Base):
         "OrganizationUnit",
         back_populates="parent",
         lazy="selectin",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
     teams = relationship(
         "Team",
         back_populates="organization_unit",
         lazy="selectin",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
 
 
@@ -155,7 +156,7 @@ class Pyrotechnician(Base):
         "Notification",
         back_populates="user",
         lazy="selectin",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
 
 
@@ -268,7 +269,7 @@ class Task(Base):
         "TaskComment",
         back_populates="task",
         lazy="selectin",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
         order_by="TaskComment.created_at",
     )
 
@@ -306,7 +307,7 @@ class TaskComment(Base):
         "TaskAttachment",
         back_populates="comment",
         lazy="selectin",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
 
 
