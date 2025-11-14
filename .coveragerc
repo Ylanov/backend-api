@@ -1,0 +1,16 @@
+[run]
+# Откуда считать покрытие
+source = app
+
+# Очень важно: делаем пути относительными,
+# чтобы Sonar смог сопоставить их внутри контейнера
+relative_files = True
+
+[report]
+omit =
+    tests/*
+    */__init__.py
+
+[xml]
+# pytest будет писать отчёт сюда
+output = coverage.xml
