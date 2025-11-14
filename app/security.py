@@ -1,7 +1,7 @@
 # app/security.py
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -32,9 +32,6 @@ if not SECRET_KEY or SECRET_KEY == "CHANGE_ME_IN_PRODUCTION":
         RuntimeWarning,
     )
 
-# ===============================
-# КЛЮЧЕВАЯ СТРОКА: Убедитесь, что она выглядит именно так
-# ===============================
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -65,14 +62,16 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """Создаём JWT access token с версией."""
-    now = datetime.utcnow()
+
+    # ✓ timezone-aware datetime вместо datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expire = now + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     to_encode = {
         "sub": str(subject),
-        "tv": int(token_version), # Версия токена
+        "tv": int(token_version),  # Версия токена
         "iat": now,
         "exp": expire,
     }
@@ -87,10 +86,8 @@ async def get_current_pyro(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> Pyrotechnician:
-    """
-    Достаём текущего пиротехника из JWT-токена,
-    проверяя версию токена для возможности сброса сессий.
-    """
+    """Достаём текущего пиротехника из JWT-токена."""
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Не удалось проверить учетные данные",
@@ -100,7 +97,7 @@ async def get_current_pyro(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         sub = payload.get("sub")
-        token_version = payload.get("tv") # Извлекаем версию
+        token_version = payload.get("tv")
         if sub is None or token_version is None:
             raise credentials_exception
         user_id = int(sub)
@@ -121,7 +118,6 @@ async def get_current_pyro(
             detail="Учетная запись деактивирована.",
         )
 
-    # Ключевая проверка для сброса сессий
     if pyro.token_version != int(token_version):
         raise credentials_exception
 
@@ -131,9 +127,7 @@ async def get_current_pyro(
 async def get_current_admin(
     current: Pyrotechnician = Depends(get_current_pyro),
 ) -> Pyrotechnician:
-    """
-    Зависимость, которая требует, чтобы текущий пользователь был администратором.
-    """
+    """Проверка, что пользователь — администратор."""
     if not current.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
