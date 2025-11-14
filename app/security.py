@@ -124,7 +124,7 @@ async def get_current_pyro(
     return pyro
 
 
-async def get_current_admin(
+def get_current_admin(
     current: Pyrotechnician = Depends(get_current_pyro),
 ) -> Pyrotechnician:
     """Проверка, что пользователь — администратор."""
