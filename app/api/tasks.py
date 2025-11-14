@@ -1,4 +1,3 @@
-# app/api/tasks.py
 from __future__ import annotations
 
 from typing import List
@@ -20,6 +19,9 @@ router = APIRouter(
     prefix="/tasks",
     tags=["tasks"],
 )
+
+# Константа для сообщения об отсутствии задачи
+ERROR_TASK_NOT_FOUND = "Task not found"
 
 
 @router.get("", response_model=List[TaskOut])
@@ -53,7 +55,11 @@ async def create_task(
     refreshed_task = result.scalars().unique().first()
 
     if not refreshed_task:
-        raise HTTPException(status_code=404, detail="Task not found after creation")
+        # отдельное сообщение, не совпадает с ERROR_TASK_NOT_FOUND
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found after creation",
+        )
 
     base_url = str(request.base_url)
     patch_attachments_urls(refreshed_task, base_url)
@@ -72,7 +78,7 @@ async def get_task(
     task = result.scalars().unique().first()
 
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=ERROR_TASK_NOT_FOUND)
 
     base_url = str(request.base_url)
     patch_attachments_urls(task, base_url)
@@ -92,7 +98,7 @@ async def update_task(
     task = result.scalars().unique().first()
 
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=ERROR_TASK_NOT_FOUND)
 
     update_data = payload.model_dump()
     for key, value in update_data.items():
@@ -116,7 +122,7 @@ async def delete_task(
 ):
     task = await db.get(Task, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=ERROR_TASK_NOT_FOUND)
 
     await db.delete(task)
     await db.commit()
