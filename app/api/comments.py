@@ -62,8 +62,8 @@ async def send_comment_notifications_bg(task_id: int, author_id: int) -> None:
     async with SessionLocal() as db:
         result = await db.execute(
             select(Task)
-                .where(Task.id == task_id)
-                .options(selectinload(Task.team).selectinload(Team.members))
+            .where(Task.id == task_id)
+            .options(selectinload(Task.team).selectinload(Team.members))
         )
         task = result.scalars().first()
         author = await db.get(Pyrotechnician, author_id)
@@ -95,6 +95,45 @@ async def send_comment_notifications_bg(task_id: int, author_id: int) -> None:
             )
 
 
+# --- НОВАЯ ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ---
+async def _process_and_validate_attachment(file: UploadFile) -> TaskAttachment:
+    """
+    Валидирует, сохраняет один файл и возвращает объект TaskAttachment.
+    Выбрасывает HTTPException в случае ошибки.
+    """
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Тип файла {file.filename} не разрешен. "
+                f"Разрешенные типы: {', '.join(ALLOWED_EXTENSIONS)}"
+            ),
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Размер файла {file.filename} превышает "
+                f"{MAX_FILE_SIZE / (1024 * 1024)}MB"
+            ),
+        )
+
+    unique_name = f"{uuid.uuid4()}{file_ext}"
+    save_path = UPLOAD_DIR / unique_name
+
+    with open(save_path, "wb") as buffer:
+        buffer.write(content)
+
+    return TaskAttachment(
+        file_name=file.filename,
+        unique_name=unique_name,
+        mime_type=file.content_type,
+    )
+
+
 @router.post("/{task_id}/comments", response_model=TaskCommentOut)
 async def create_task_comment(
     task_id: int,
@@ -119,43 +158,15 @@ async def create_task_comment(
     comment = TaskComment(text=text, task_id=task_id, author_id=author_id)
     db.add(comment)
 
+    # --- УПРОЩЕННЫЙ БЛОК ОБРАБОТКИ ФАЙЛОВ ---
     if files:
         for file in files:
-            if not file.filename:
+            if not file or not file.filename:
                 continue
 
-            file_ext = Path(file.filename).suffix.lower()
-            if file_ext not in ALLOWED_EXTENSIONS:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Тип файла {file.filename} не разрешен. "
-                        f"Разрешенные типы: {', '.join(ALLOWED_EXTENSIONS)}"
-                    ),
-                )
-
-            content = await file.read()
-            if len(content) > MAX_FILE_SIZE:
-                raise HTTPException(
-                    status_code=413,
-                    detail=(
-                        f"Размер файла {file.filename} превышает "
-                        f"{MAX_FILE_SIZE / (1024 * 1024)}MB"
-                    ),
-                )
-
-            unique_name = f"{uuid.uuid4()}{file_ext}"
-            save_path = UPLOAD_DIR / unique_name
-
-            with open(save_path, "wb") as buffer:
-                buffer.write(content)
-
-            attachment = TaskAttachment(
-                file_name=file.filename,
-                unique_name=unique_name,
-                mime_type=file.content_type,
-                comment=comment,
-            )
+            # Вся сложная логика теперь в одной функции
+            attachment = await _process_and_validate_attachment(file)
+            attachment.comment = comment  # Привязываем к комментарию
             db.add(attachment)
 
     await db.commit()
