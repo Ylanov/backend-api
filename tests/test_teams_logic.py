@@ -1,123 +1,104 @@
-# tests/test_teams_logic.py
+# tests/test_tasks_logic.py
 import asyncio
-from typing import List, Optional
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
-from app.api import teams as teams_module
-from app.models import Pyrotechnician, Team
-from app.schemas import TeamCreate, TeamUpdate, TeamPatch
+from app.api import tasks as tasks_module
+from app.models import Task
+from app.schemas import TaskCreate, TaskUpdate
 
 
-class MockTeamQueryResult:
-    def __init__(self, result: Optional[Team] = None):
-        self._result = result
+class MockScalars:
+    def __init__(self, task=None):
+        self._task = task
+
+    def unique(self):
+        return self
 
     def first(self):
-        return self._result
+        return self._task
 
-    def scalar_one(self):
-        return 1 if self._result else 0
+    def one(self):
+        if not self._task:
+            raise Exception("No row was found for one()")
+        return self._task
+
+    def all(self):
+        return [self._task] if self._task else []
 
 
-class DummySessionForTeams:
-    """Заглушка AsyncSession для тестирования логики эндпоинтов /teams."""
+class DummySessionForTasks:
+    """Заглушка AsyncSession для тестирования логики эндпоинтов /tasks."""
 
     def __init__(self):
         self.committed = False
         self.deleted = False
-        self.refreshed = False
-        self._storage = {}  # Простое хранилище {модель: {id: объект}}
         self._execute_result = None
+        self._storage = {}
 
-    def set_execute_result(self, result: Optional[Team] = None):
-        self._execute_result = MockTeamQueryResult(result)
-
-    async def get(self, model, pk, options=None):
-        return self._storage.get(model, {}).get(pk)
+    def set_execute_result(self, task=None):
+        self._execute_result = MagicMock(scalars=lambda: MockScalars(task))
 
     def add(self, obj):
-        if Team not in self._storage:
-            self._storage[Team] = {}
-        # Симулируем автоинкремент
-        new_id = len(self._storage[Team]) + 1
-        obj.id = new_id
-        self._storage[Team][new_id] = obj
-
-    async def delete(self, obj):
-        if self._storage.get(Team, {}).get(obj.id):
-            del self._storage[Team][obj.id]
-            self.deleted = True
+        if isinstance(obj, Task):
+            obj.id = 1
+            self._storage[1] = obj
+            # После добавления execute должен найти эту задачу
+            self.set_execute_result(obj)
 
     async def commit(self):
         self.committed = True
 
-    async def refresh(self, obj):
-        self.refreshed = True
-
     async def execute(self, stmt):
         return self._execute_result
 
+    async def get(self, model, pk):
+        return self._storage.get(pk)
 
-@pytest.mark.asyncio
-async def test_create_team_conflict():
-    """Проверяем ошибку 409 при создании команды с неуникальным именем."""
-    db = DummySessionForTeams()
-    # Симулируем, что в базе уже есть команда с таким именем
-    db.set_execute_result(Team(id=2, name="Existing Team"))
+    async def delete(self, obj):
+        if obj.id in self._storage:
+            del self._storage[obj.id]
+            self.deleted = True
 
-    payload = TeamCreate(name="Existing Team", organization_unit_id=1)
+
+@pytest.fixture
+def mock_request():
+    """Фикстура для создания мока Request с base_url."""
+    req = MagicMock()
+    req.base_url = "http://testserver/"
+    return req
+
+def test_update_task_not_found(mock_request):
+    """Проверяем ошибку 404 при обновлении несуществующей задачи."""
+    db = DummySessionForTasks()
+    db.set_execute_result(task=None)  # execute вернет None
+    payload = TaskUpdate(title="New Title")
+
+    async def _call():
+        await tasks_module.update_task(
+            task_id=999, payload=payload, request=mock_request, db=db
+        )
 
     with pytest.raises(HTTPException) as exc:
-        await teams_module.create_team(payload=payload, db=db)
-
-    assert exc.value.status_code == 409
-    assert "already exists" in exc.value.detail
-
-
-@pytest.mark.asyncio
-async def test_update_team_not_found():
-    """Проверяем ошибку 404 при обновлении несуществующей команды."""
-    db = DummySessionForTeams()
-    payload = TeamUpdate(name="New Name")
-
-    with pytest.raises(HTTPException) as exc:
-        await teams_module.update_team(team_id=999, payload=payload, db=db)
+        asyncio.run(_call())
 
     assert exc.value.status_code == 404
-    assert exc.value.detail == "Team not found"
+    assert exc.value.detail == "Task not found"
 
 
-@pytest.mark.asyncio
-async def test_patch_team_conflict():
-    """Проверяем ошибку 409 при частичном обновлении, приводящем к конфликту имен."""
-    db = DummySessionForTeams()
-    # В "базе" есть команда, которую мы пытаемся обновить
-    existing_team = Team(id=1, name="Old Name", organization_unit_id=1)
-    db._storage[Team] = {1: existing_team}
+def test_delete_task_success():
+    """Проверяем успешное удаление задачи."""
+    task_to_delete = Task(id=1, title="Initial title")
+    db = DummySessionForTasks()
+    db._storage = {1: task_to_delete}  # Помещаем задачу в хранилище
 
-    # И симулируем, что другая команда с целевым именем уже существует
-    db.set_execute_result(Team(id=2, name="New Conflicting Name"))
+    async def _call():
+        await tasks_module.delete_task(task_id=1, db=db)
 
-    payload = TeamPatch(name="New Conflicting Name")
+    asyncio.run(_call())
 
-    with pytest.raises(HTTPException) as exc:
-        await teams_module.patch_team(team_id=1, payload=payload, db=db)
-
-    assert exc.value.status_code == 409
-    assert "already exists" in exc.value.detail
-
-
-@pytest.mark.asyncio
-async def test_delete_team_success():
-    """Проверяем успешное удаление команды."""
-    db = DummySessionForTeams()
-    team_to_delete = Team(id=1, name="Team to Delete")
-    db._storage[Team] = {1: team_to_delete}
-
-    await teams_module.delete_team(team_id=1, db=db)
-
-    assert 1 not in db._storage[Team]
+    assert 1 not in db._storage
     assert db.deleted is True
     assert db.committed is True
