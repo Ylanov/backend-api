@@ -163,7 +163,10 @@ async def get_organization_structure(
     )
 
     all_units = result.scalars().unique().all()
-    unit_map = {u.id: u for u in all_units}
+
+    # Удалено: unit_map — не использовалось
+    # unit_map = {u.id: u for u in all_units}
+
     node_map: Dict[int, OrganizationNode] = {}
 
     def build_node(unit: OrganizationUnit) -> OrganizationNode:
@@ -171,6 +174,7 @@ async def get_organization_structure(
             return node_map[unit.id]
 
         team_nodes: List[OrganizationNode] = []
+
         # команды внутри подразделения
         for team in sorted(unit.teams, key=lambda t: t.name):
             member_nodes = [
@@ -183,6 +187,7 @@ async def get_organization_structure(
                 )
                 for m in sorted(team.members, key=lambda p: p.full_name)
             ]
+
             team_nodes.append(
                 OrganizationNode(
                     id=f"team-{team.id}",
@@ -203,6 +208,7 @@ async def get_organization_structure(
             type="unit",
             children=team_nodes,
         )
+
         node_map[unit.id] = node
         return node
 
@@ -219,7 +225,7 @@ async def get_organization_structure(
         else:
             root_nodes.append(node)
 
-    # сортируем детей: сначала подразделения, потом остальные
+    # сортируем детей: сначала подразделения, потом по имени
     for node in node_map.values():
         node.children.sort(key=lambda x: (x.type != "unit", x.name))
 
