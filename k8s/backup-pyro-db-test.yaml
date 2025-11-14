@@ -1,0 +1,11 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  name: pyro-db-manual-test-backup
+  namespace: default
+spec:
+  cluster:
+    name: pyro-db
+  # метод можно не указывать — он возьмётся из spec.backup,
+  # но давай явно, как у существующего:
+  method: barmanObjectStore

@@ -80,3 +80,38 @@ spec:
 
   # -------- Политика обновления primary --------
   primaryUpdateStrategy: unsupervised
+
+  # -------- Бэкапы в MinIO (S3) --------
+  backup:
+    barmanObjectStore:
+      # Путь до бакета в MinIO (s3://<имя_бакета>/)
+      destinationPath: s3://pyro-db-backups/
+
+      # URL сервиса MinIO внутри кластера
+      endpointURL: http://minio.default.svc.cluster.local:9000
+
+      # Credentials для доступа к MinIO
+      s3Credentials:
+        accessKeyId:
+          name: cnpg-backup-minio-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: cnpg-backup-minio-credentials
+          key: ACCESS_SECRET_KEY
+
+      # Настройки WAL-архивации
+      wal:
+        compression: gzip
+
+      # Настройки архивов данных
+      data:
+        compression: gzip
+
+    # Политика хранения бэкапов: храним за последние 7 дней
+    retentionPolicy: "7d"
+
+  # -------- Мониторинг PostgreSQL --------
+  # Если у тебя в кластере установлен Prometheus Operator,
+  # CNPG создаст PodMonitor, и метрики Postgres попадут в Пром.
+  monitoring:
+    enablePodMonitor: true

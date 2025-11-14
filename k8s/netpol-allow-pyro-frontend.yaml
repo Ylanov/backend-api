@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-pyro-frontend
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: pyro-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 80
+      # Тоже без from => любой источник внутри кластера
+      # (а наружу всё равно только через Ingress).

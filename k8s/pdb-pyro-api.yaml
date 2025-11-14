@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pyro-api-pdb
+  namespace: default
+spec:
+  # Гарантируем, что хотя бы 1 pod API останется при voluntary disruption
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: pyro-api

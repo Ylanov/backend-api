@@ -1,0 +1,18 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: pyro-db-scheduled-backup
+  namespace: default
+spec:
+  # Формат cron из Go: секунда, минута, час, день, месяц, день_недели
+  # Здесь: каждый день в 00:00:00
+  schedule: "0 0 0 * * *"
+
+  # Делаем первый бэкап сразу после создания
+  immediate: true
+
+  # Кто владелец Backup объектов (удобнее self)
+  backupOwnerReference: self
+
+  cluster:
+    name: pyro-db

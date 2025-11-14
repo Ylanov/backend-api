@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  # Если у тебя storageClass по умолчанию нормальный — оставь так.
+  # Если нужно явно local-path:
+  # storageClassName: local-path

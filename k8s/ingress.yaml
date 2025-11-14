@@ -1,21 +1,25 @@
-# ingress.yaml (для работы за Nginx Proxy Manager)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: pyro-ingress
   namespace: default
+  labels:
+    app: pyro-ingress
   annotations:
-    # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-    # Убираем все аннотации, связанные с SSL, так как этим занимается NPM
-    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # TLS / редиректом на HTTPS занимается Nginx Proxy Manager,
+    # поэтому аннотации cert-manager и force-ssl-redirect не используем.
+
+    # Максимальный размер тела запроса (аплоады файлов и т.п.)
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+    # Таймаут ожидания ответа от backend (API)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+    # Таймаут отправки ответа клиенту
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
   ingressClassName: nginx
-  # Убираем секцию TLS, сертификатом управляет NPM
-  # tls:
-  #   - hosts:
-  #       - pyro.asy-tk.ru
-  #     secretName: pyro-tls-secret
+
   rules:
     - host: pyro.asy-tk.ru
       http:
