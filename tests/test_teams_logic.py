@@ -1,4 +1,4 @@
-# tests/test_tasks_logic.py
+# tests/test_teams_logic.py
 import asyncio
 from unittest.mock import MagicMock
 
@@ -20,17 +20,17 @@ class MockScalars:
     def first(self):
         return self._task
 
-    def one(self):
-        if not self._task:
-            raise Exception("No row was found for one()")
-        return self._task
-
     def all(self):
         return [self._task] if self._task else []
 
 
 class DummySessionForTasks:
-    """Заглушка AsyncSession для тестирования логики эндпоинтов /tasks."""
+    """
+    Заглушка AsyncSession для обычных сценариев:
+    - create_task (успешно),
+    - update_task (404),
+    - delete_task (успешно).
+    """
 
     def __init__(self):
         self.committed = False
@@ -43,9 +43,10 @@ class DummySessionForTasks:
 
     def add(self, obj):
         if isinstance(obj, Task):
+            # эмулируем присвоение id и сохранение в "базу"
             obj.id = 1
             self._storage[1] = obj
-            # После добавления execute должен найти эту задачу
+            # после add() create_task ожидает, что execute найдёт эту задачу
             self.set_execute_result(obj)
 
     async def commit(self):
@@ -63,6 +64,36 @@ class DummySessionForTasks:
             self.deleted = True
 
 
+class DummySessionRefreshFail:
+    """
+    Специальная заглушка для проверки ветки
+    "Task not found after creation" — execute() всегда
+    возвращает scalars().unique().first() == None.
+    """
+
+    def __init__(self):
+        self.added = []
+        self.committed = False
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def commit(self):
+        self.committed = True
+
+    async def execute(self, stmt):
+        class _Scalars:
+            def unique(self):
+                return self
+
+            def first(self):
+                # имитируем ситуацию, когда только что созданную задачу
+                # не получилось найти
+                return None
+
+        return MagicMock(scalars=lambda: _Scalars())
+
+
 @pytest.fixture
 def mock_request():
     """Фикстура для создания мока Request с base_url."""
@@ -70,15 +101,66 @@ def mock_request():
     req.base_url = "http://testserver/"
     return req
 
+
+def test_create_task_success(mock_request):
+    """
+    Проверяем успешное создание задачи:
+    - задача возвращается с id,
+    - транзакция зафиксирована.
+    """
+    db = DummySessionForTasks()
+    payload = TaskCreate(title="Test Task")
+
+    async def _call():
+        return await tasks_module.create_task(
+            payload=payload,
+            request=mock_request,
+            db=db,
+        )
+
+    created = asyncio.run(_call())
+
+    assert isinstance(created, Task)
+    assert created.id == 1
+    assert created.title == "Test Task"
+    assert db.committed is True
+
+
+def test_create_task_fails_to_refresh(mock_request):
+    """
+    Проверяем редкий случай, когда задача создана,
+    но не может быть найдена сразу после создания.
+    Должен сработать raise HTTPException(404, "Task not found after creation").
+    """
+    db = DummySessionRefreshFail()
+    payload = TaskCreate(title="Test Task")
+
+    async def _call():
+        await tasks_module.create_task(
+            payload=payload,
+            request=mock_request,
+            db=db,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_call())
+
+    assert exc.value.status_code == 404
+    assert "Task not found after creation" in exc.value.detail
+
+
 def test_update_task_not_found(mock_request):
     """Проверяем ошибку 404 при обновлении несуществующей задачи."""
     db = DummySessionForTasks()
-    db.set_execute_result(task=None)  # execute вернет None
+    db.set_execute_result(task=None)  # execute вернёт None
     payload = TaskUpdate(title="New Title")
 
     async def _call():
         await tasks_module.update_task(
-            task_id=999, payload=payload, request=mock_request, db=db
+            task_id=999,
+            payload=payload,
+            request=mock_request,
+            db=db,
         )
 
     with pytest.raises(HTTPException) as exc:
