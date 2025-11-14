@@ -1,4 +1,3 @@
-# app/api/pyrotechnicians.py
 from __future__ import annotations
 import secrets
 import string
@@ -20,10 +19,16 @@ from app.schemas import (
 )
 from app.security import get_current_admin, get_password_hash
 
+
 router = APIRouter(
     prefix="/pyrotechnicians",
     tags=["pyrotechnicians"],
 )
+
+# -----------------------------------------
+# 🔥 Константа для избежания дублирования
+# -----------------------------------------
+ERROR_PYRO_NOT_FOUND = "Pyrotechnician not found"
 
 
 class BulkDeletePayload(BaseModel):
@@ -33,13 +38,13 @@ class BulkDeletePayload(BaseModel):
 class PyrotechnicianFlagsUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
-    must_change_password: Optional[bool] = None  # <-- НОВОЕ ПОЛЕ
+    must_change_password: Optional[bool] = None  # <-- новое поле
 
 
 @router.get("", response_model=List[PyroOut])
 async def list_pyrotechnicians(
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     result = await db.execute(
         select(Pyrotechnician).order_by(Pyrotechnician.full_name)
@@ -49,9 +54,9 @@ async def list_pyrotechnicians(
 
 @router.post("", response_model=PyroOut, status_code=status.HTTP_201_CREATED)
 async def create_pyrotechnician(
-        payload: PyrotechnicianCreate,
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    payload: PyrotechnicianCreate,
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     q = select(Pyrotechnician).where(
         Pyrotechnician.full_name == payload.full_name
@@ -71,8 +76,8 @@ async def create_pyrotechnician(
 
 @router.get("/unassigned", response_model=List[PyroOut])
 async def list_unassigned_pyrotechnicians(
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     subq = select(pyrotechnician_team_association.c.pyrotechnician_id).distinct()
     result = await db.execute(
@@ -85,26 +90,26 @@ async def list_unassigned_pyrotechnicians(
 
 @router.get("/{pyro_id}", response_model=PyroOut)
 async def get_pyrotechnician(
-        pyro_id: int,
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    pyro_id: int,
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     pyro = await db.get(Pyrotechnician, pyro_id)
     if not pyro:
-        raise HTTPException(status_code=404, detail="Pyrotechnician not found")
+        raise HTTPException(status_code=404, detail=ERROR_PYRO_NOT_FOUND)
     return pyro
 
 
 @router.put("/{pyro_id}", response_model=PyroOut)
 async def update_pyrotechnician(
-        pyro_id: int,
-        payload: PyrotechnicianUpdate,
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    pyro_id: int,
+    payload: PyrotechnicianUpdate,
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     pyro = await db.get(Pyrotechnician, pyro_id)
     if not pyro:
-        raise HTTPException(status_code=404, detail="Pyrotechnician not found")
+        raise HTTPException(status_code=404, detail=ERROR_PYRO_NOT_FOUND)
 
     if payload.full_name != pyro.full_name:
         q = select(Pyrotechnician).where(
@@ -126,14 +131,14 @@ async def update_pyrotechnician(
 
 @router.patch("/{pyro_id}/flags", response_model=PyroOut)
 async def update_pyrotechnician_flags(
-        pyro_id: int,
-        payload: PyrotechnicianFlagsUpdate,
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    pyro_id: int,
+    payload: PyrotechnicianFlagsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     pyro = await db.get(Pyrotechnician, pyro_id)
     if not pyro:
-        raise HTTPException(status_code=404, detail="Pyrotechnician not found")
+        raise HTTPException(status_code=404, detail=ERROR_PYRO_NOT_FOUND)
 
     if pyro.id == current.id and payload.is_admin is False:
         raise HTTPException(
@@ -147,10 +152,8 @@ async def update_pyrotechnician_flags(
         pyro.is_active = update_data["is_active"]
     if "is_admin" in update_data:
         pyro.is_admin = update_data["is_admin"]
-    # --- НОВАЯ ЛОГИКА ---
     if "must_change_password" in update_data:
         pyro.must_change_password = update_data["must_change_password"]
-    # --------------------
 
     db.add(pyro)
     await db.commit()
@@ -160,13 +163,13 @@ async def update_pyrotechnician_flags(
 
 @router.delete("/{pyro_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_pyrotechnician(
-        pyro_id: int,
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    pyro_id: int,
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     pyro = await db.get(Pyrotechnician, pyro_id)
     if not pyro:
-        raise HTTPException(status_code=404, detail="Pyrotechnician not found")
+        raise HTTPException(status_code=404, detail=ERROR_PYRO_NOT_FOUND)
 
     await db.delete(pyro)
     await db.commit()
@@ -175,9 +178,9 @@ async def delete_pyrotechnician(
 
 @router.post("/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
 async def bulk_delete_pyrotechnicians(
-        payload: BulkDeletePayload,
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    payload: BulkDeletePayload,
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     if not payload.ids:
         return None
@@ -200,10 +203,10 @@ async def bulk_delete_pyrotechnicians(
     status_code=status.HTTP_200_OK,
 )
 async def set_pyrotechnician_password(
-        pyro_id: int,
-        payload: AdminSetPasswordRequest,
-        db: AsyncSession = Depends(get_db),
-        current: Pyrotechnician = Depends(get_current_admin),
+    pyro_id: int,
+    payload: AdminSetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current: Pyrotechnician = Depends(get_current_admin),
 ):
     pyro = await db.get(Pyrotechnician, pyro_id)
     if not pyro:
