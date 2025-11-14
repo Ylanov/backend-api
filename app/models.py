@@ -1,5 +1,3 @@
-# app/models.py
-
 from __future__ import annotations
 import enum
 from sqlalchemy import (
@@ -20,6 +18,12 @@ from sqlalchemy.sql import func
 
 # Берём Base из единого модуля database.py
 from .database import Base
+
+
+# --- КОНСТАНТЫ ДЛЯ FK И ON DELETE (убираем дубли строк) ---
+
+PYROTECHNICIAN_FK_TARGET = "pyrotechnicians.id"
+ONDELETE_SET_NULL = "SET NULL"
 
 
 # --- ENUM-ТИПЫ ---
@@ -43,7 +47,11 @@ class TaskPriority(str, enum.Enum):
 pyrotechnician_team_association = Table(
     "pyrotechnician_team_association",
     Base.metadata,
-    Column("pyrotechnician_id", ForeignKey("pyrotechnicians.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "pyrotechnician_id",
+        ForeignKey(PYROTECHNICIAN_FK_TARGET, ondelete="CASCADE"),
+        primary_key=True,
+    ),
     Column("team_id", ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True),
 )
 
@@ -94,16 +102,43 @@ class Pyrotechnician(Base):
     password_hash = Column(String(255), nullable=True)
 
     # --- Поля для безопасности и управления доступом ---
-    is_active = Column(Boolean, nullable=False, default=True, server_default="true", index=True)
-    is_admin = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
-    token_version = Column(Integer, nullable=False, default=1, server_default="1")
+    is_active = Column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        index=True,
+    )
+    is_admin = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+        index=True,
+    )
+    token_version = Column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
 
     # --- НОВОЕ ПОЛЕ: Требуется ли смена пароля при первом входе ---
-    must_change_password = Column(Boolean, nullable=False, default=False, server_default="false")
+    must_change_password = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
     # --- Поля для контроля входов ---
     last_login_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    login_count = Column(Integer, nullable=False, default=0, server_default="0")
+    login_count = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
 
     teams = relationship(
         "Team",
@@ -134,13 +169,13 @@ class Team(Base):
     name = Column(String(255), nullable=False)
     lead_id = Column(
         Integer,
-        ForeignKey("pyrotechnicians.id", ondelete="SET NULL"),
+        ForeignKey(PYROTECHNICIAN_FK_TARGET, ondelete=ONDELETE_SET_NULL),
         nullable=True,
         index=True,
     )
     organization_unit_id = Column(
         Integer,
-        ForeignKey("organization_units.id", ondelete="SET NULL"),
+        ForeignKey("organization_units.id", ondelete=ONDELETE_SET_NULL),
         nullable=True,
         index=True,
     )
@@ -208,13 +243,13 @@ class Task(Base):
     updated_at = Column(DateTime(timezone=True), server_onupdate=func.now())
     team_id = Column(
         Integer,
-        ForeignKey("teams.id", ondelete="SET NULL"),
+        ForeignKey("teams.id", ondelete=ONDELETE_SET_NULL),
         nullable=True,
         index=True,
     )
     zone_id = Column(
         Integer,
-        ForeignKey("zones.id", ondelete="SET NULL"),
+        ForeignKey("zones.id", ondelete=ONDELETE_SET_NULL),
         nullable=True,
         index=True,
     )
@@ -252,7 +287,7 @@ class TaskComment(Base):
     )
     author_id = Column(
         Integer,
-        ForeignKey("pyrotechnicians.id", ondelete="CASCADE"),
+        ForeignKey(PYROTECHNICIAN_FK_TARGET, ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -307,7 +342,7 @@ class Notification(Base):
     link = Column(String(255), nullable=True)
     user_id = Column(
         Integer,
-        ForeignKey("pyrotechnicians.id", ondelete="CASCADE"),
+        ForeignKey(PYROTECHNICIAN_FK_TARGET, ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -344,7 +379,7 @@ class LoginEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
         Integer,
-        ForeignKey("pyrotechnicians.id", ondelete="SET NULL"),
+        ForeignKey(PYROTECHNICIAN_FK_TARGET, ondelete=ONDELETE_SET_NULL),
         nullable=True,
         index=True,
     )
@@ -352,7 +387,11 @@ class LoginEvent(Base):
     success = Column(Boolean, nullable=False, index=True)
     ip = Column(String(64), nullable=True)
     user_agent = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
 
     user = relationship("Pyrotechnician", lazy="selectin")
 
@@ -366,7 +405,7 @@ class AuditLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
         Integer,
-        ForeignKey("pyrotechnicians.id", ondelete="SET NULL"),
+        ForeignKey(PYROTECHNICIAN_FK_TARGET, ondelete=ONDELETE_SET_NULL),
         nullable=True,
         index=True,
     )
@@ -375,6 +414,10 @@ class AuditLog(Base):
     object_id = Column(String(50), nullable=True, index=True)
     description = Column(Text, nullable=True)
     ip = Column(String(64), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
 
     user = relationship("Pyrotechnician", lazy="selectin")

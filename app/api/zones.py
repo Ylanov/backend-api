@@ -1,4 +1,3 @@
-# app/api/zones.py
 from __future__ import annotations
 
 from typing import List
@@ -22,6 +21,11 @@ router = APIRouter(
     prefix="/zones",
     tags=["zones"],
 )
+
+# -------------------------
+# Константа ошибки
+# -------------------------
+ERROR_ZONE_NOT_FOUND = "Zone not found"
 
 
 @router.get("", response_model=List[ZoneOut])
@@ -63,7 +67,7 @@ async def update_zone(
 ):
     zone = await db.get(Zone, zone_id)
     if not zone:
-        raise HTTPException(status_code=404, detail="Zone not found")
+        raise HTTPException(status_code=404, detail=ERROR_ZONE_NOT_FOUND)
 
     if payload.name != zone.name:
         q = select(Zone).where(Zone.name == payload.name)
@@ -89,7 +93,7 @@ async def delete_zone(
 ):
     zone = await db.get(Zone, zone_id)
     if not zone:
-        raise HTTPException(status_code=404, detail="Zone not found")
+        raise HTTPException(status_code=404, detail=ERROR_ZONE_NOT_FOUND)
 
     await db.delete(zone)
     await db.commit()
@@ -108,5 +112,5 @@ async def get_zone_details(
     )
     zone = result.scalars().first()
     if not zone:
-        raise HTTPException(status_code=404, detail="Zone not found")
+        raise HTTPException(status_code=404, detail=ERROR_ZONE_NOT_FOUND)
     return zone
