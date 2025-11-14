@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from app.api import teams as teams_module
 from app.models import Team, Pyrotechnician
-from app.schemas import TeamCreate, TeamPatch
+from app.schemas import TeamCreate, TeamUpdate, TeamPatch
 
 
 # ============================
@@ -93,7 +93,7 @@ def test_get_team_not_found_raises_404():
 
 
 # ============================
-#  patch_team: конфликт уникальности
+#  update_team: конфликт уникальности в целевом юните
 # ============================
 
 class DummyResultFirstSomething:
@@ -102,6 +102,135 @@ class DummyResultFirstSomething:
     def first(self):
         return object()
 
+
+class DummySessionUpdateConflict:
+    """
+    Для update_team: get() возвращает существующую команду,
+    а execute().first() → не-None, чтобы сработал 409.
+    """
+
+    def __init__(self):
+        self.team = Team(
+            id=1,
+            name="Old Name",
+            lead_id=None,
+            organization_unit_id=10,
+        )
+        self.team.members = []
+
+    async def get(self, model, pk, **kwargs):
+        # kwargs принимает options=[selectinload(...)] и т.п.
+        assert model is Team
+        assert pk == 1
+        return self.team
+
+    async def execute(self, stmt):
+        # это вызов проверки уникальности:
+        # select(Team).where(and_(...)).first()
+        return DummyResultFirstSomething()
+
+    async def commit(self):
+        raise AssertionError("commit() не должен вызываться при конфликте")
+
+    async def refresh(self, obj):
+        raise AssertionError("refresh() не должен вызываться при конфликте")
+
+
+def test_update_team_conflict_in_target_unit():
+    """
+    Если при полном обновлении (update_team) новое имя уже занято
+    в целевом подразделении, должен быть 409 и нужное сообщение.
+    """
+    db = DummySessionUpdateConflict()
+    payload = TeamUpdate(
+        name="New Name",
+        lead_id=None,
+        organization_unit_id=10,
+        # список, а не None, чтобы пройти валидацию Pydantic
+        member_ids=[],   # нам всё равно, конфликт случится раньше commit
+    )
+
+    async def _call():
+        await teams_module.update_team(team_id=1, payload=payload, db=db)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_call())
+
+    assert exc.value.status_code == 409
+    assert "Another team with this name already exists in the target unit" in exc.value.detail
+
+
+# ============================
+#  update_team: очистка участников, если member_ids=[]
+# ============================
+
+class DummyResultNoConflict:
+    """execute().first() возвращает None → конфликта по имени нет."""
+
+    def first(self):
+        return None
+
+
+class DummySessionUpdateClearMembers:
+    """
+    Для update_team: успешно обновляем команду
+    и передаем member_ids = [] → участники должны очиститься.
+    """
+
+    def __init__(self):
+        self.team = Team(
+            id=1,
+            name="Team A",
+            lead_id=5,
+            organization_unit_id=20,
+        )
+        # имитируем, что у команды уже есть участники
+        self.team.members = [Pyrotechnician(id=1), Pyrotechnician(id=2)]
+        self.committed = False
+
+    async def get(self, model, pk, **kwargs):
+        assert model is Team
+        assert pk == 1
+        return self.team
+
+    async def execute(self, stmt):
+        # Проверка уникальности имени — конфликта нет
+        return DummyResultNoConflict()
+
+    async def commit(self):
+        self.committed = True
+
+    async def refresh(self, obj):
+        # ничего не делаем — нас интересует состояние team.members
+        pass
+
+
+def test_update_team_clears_members_when_member_ids_empty():
+    """
+    Если в update_team передать member_ids = [],
+    backend должен очистить список участников и закоммитить изменения.
+    """
+    db = DummySessionUpdateClearMembers()
+    payload = TeamUpdate(
+        name="Team A",          # то же имя
+        lead_id=5,
+        organization_unit_id=20,
+        member_ids=[],          # ключевое условие
+    )
+
+    async def _call():
+        return await teams_module.update_team(team_id=1, payload=payload, db=db)
+
+    updated = asyncio.run(_call())
+
+    assert updated.members == []
+    assert db.team.members == []
+    assert db.committed is True
+
+
+# ============================
+#  patch_team: конфликт уникальности
+# ============================
 
 class DummySessionPatchConflict:
     """
