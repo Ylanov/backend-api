@@ -1,4 +1,3 @@
-# app/api/teams.py
 from __future__ import annotations
 
 from typing import List
@@ -21,6 +20,11 @@ router = APIRouter(
     prefix="/teams",
     tags=["teams"],
 )
+
+# -------------------------------
+# Константа для ошибки
+# -------------------------------
+ERROR_TEAM_NOT_FOUND = "Team not found"
 
 
 @router.get("", response_model=List[TeamOut])
@@ -48,7 +52,7 @@ async def get_team(team_id: int, db: AsyncSession = Depends(get_db)):
     )
     team = result.scalars().first()
     if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+        raise HTTPException(status_code=404, detail=ERROR_TEAM_NOT_FOUND)
     return team
 
 
@@ -98,7 +102,7 @@ async def update_team(
 ):
     team = await db.get(Team, team_id, options=[selectinload(Team.members)])
     if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+        raise HTTPException(status_code=404, detail=ERROR_TEAM_NOT_FOUND)
 
     # проверка уникальности имени в целевом подразделении
     filters = [Team.id != team_id, Team.name == payload.name]
@@ -142,16 +146,14 @@ async def patch_team(
 ):
     team = await db.get(Team, team_id, options=[selectinload(Team.members)])
     if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+        raise HTTPException(status_code=404, detail=ERROR_TEAM_NOT_FOUND)
 
     update_data = payload.model_dump(exclude_unset=True)
 
     # если меняем имя или подразделение — проверяем уникальность
     if "name" in update_data or "organization_unit_id" in update_data:
         new_name = update_data.get("name", team.name)
-        new_unit_id = update_data.get(
-            "organization_unit_id", team.organization_unit_id
-        )
+        new_unit_id = update_data.get("organization_unit_id", team.organization_unit_id)
 
         filters = [Team.id != team_id, Team.name == new_name]
         if new_unit_id is None:
@@ -191,7 +193,8 @@ async def patch_team(
 async def delete_team(team_id: int, db: AsyncSession = Depends(get_db)):
     team = await db.get(Team, team_id)
     if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+        raise HTTPException(status_code=404, detail=ERROR_TEAM_NOT_FOUND)
+
     await db.delete(team)
     await db.commit()
     return None
