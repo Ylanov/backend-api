@@ -197,5 +197,5 @@ def test_create_task_comment_with_text_only_persists_and_schedules_notifications
     assert comment.text == "Hello from test"
 
     # В BackgroundTasks должна появиться хотя бы одна задача (уведомления)
-    # У starlette.background.BackgroundTasks есть .tasks со списком задач.
+    # У starlette.background.BackgroundTasks есть .tasks со списком задач.1
     assert len(background_tasks.tasks) >= 1
