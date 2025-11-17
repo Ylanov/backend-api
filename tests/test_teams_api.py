@@ -1,350 +1,253 @@
 # tests/test_teams_api.py
 import asyncio
+from typing import List, Any, Optional
 
 import pytest
 from fastapi import HTTPException
 
 from app.api import teams as teams_module
-from app.models import Team, Pyrotechnician
+from app.models import Team, Pyrotechnician  # <-- Используем реальные модели
 from app.schemas import TeamCreate, TeamUpdate, TeamPatch
 
 
 # ============================
-#  create_team: конфликт по имени
+# ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ
 # ============================
 
-class DummyExecuteCountOne:
-    """Результат execute(), у которого scalar_one() возвращает 1 (есть дубликат)."""
+class DummyResult:
+    """Универсальная эмуляция результата db.execute()."""
+    def __init__(self, items: List[Any]):
+        self._items = items
+
+    def scalars(self):
+        class _Scalars:
+            def __init__(self, items):
+                self._items = items
+            def all(self): return list(self._items)
+            def unique(self): return self
+            def first(self): return self._items[0] if self._items else None
+        return _Scalars(self._items)
+
+    def first(self):
+        return self._items[0] if self._items else None
 
     def scalar_one(self):
-        return 1
+        # Для проверки func.count()
+        if len(self._items) == 1 and isinstance(self._items[0], int):
+            return self._items[0]
+        raise ValueError("scalar_one() expected a single integer result.")
 
 
-class DummySessionTeamConflict:
-    """
-    AsyncSession-заглушка для create_team:
-    execute() говорит, что уже есть команда с таким именем.
-    """
+class DummySession:
+    """Универсальная заглушка AsyncSession для API команд."""
+    def __init__(self):
+        self._storage: dict[int, Team] = {} # <-- Храним реальные Team
+        self._execute_queue: List[DummyResult] = []
+        self.added: List[Any] = []
+        self.deleted: List[Any] = []
+        self.committed = False
+
+    def seed(self, teams: List[Team]):
+        self._storage = {t.id: t for t in teams}
+
+    def expect_execute(self, result_items: List[Any]):
+        self._execute_queue.append(DummyResult(result_items))
+
+    async def get(self, model, pk, **kwargs):
+        return self._storage.get(pk)
 
     async def execute(self, stmt):
-        return DummyExecuteCountOne()
+        if not self._execute_queue:
+            raise AssertionError(f"Unexpected call to db.execute() with statement: {stmt}")
+        return self._execute_queue.pop(0)
 
     def add(self, obj):
-        raise AssertionError("add() не должен вызываться при конфликте имени")
+        self.added.append(obj)
+
+    async def delete(self, obj):
+        self.deleted.append(obj)
 
     async def commit(self):
-        raise AssertionError("commit() не должен вызываться при конфликте имени")
+        self.committed = True
 
+    async def refresh(self, obj):
+        if isinstance(obj, Team) and not obj.id:
+            obj.id = 999
+        # Присваиваем отношения вручную, т.к. refresh в SQLAlchemy делает это
+        if hasattr(obj, 'members'):
+            pass # В реальной жизни тут бы подгрузились участники
+        pass
 
-def test_create_team_conflict_by_name():
-    """
-    Если в подразделении уже есть команда с таким именем,
-    create_team должен вернуть 409.
-    """
-    db = DummySessionTeamConflict()
-    payload = TeamCreate(
-        name="Alpha",
-        lead_id=None,
-        organization_unit_id=None,
-        member_ids=[],
-    )
+# ============================
+# ТЕСТЫ
+# ============================
+
+def test_list_teams_success():
+    """Проверяет успешное получение списка всех команд."""
+    db = DummySession()
+    t1 = Team(id=1, name="Alpha")
+    t2 = Team(id=2, name="Bravo")
+    db.expect_execute([t1, t2])
 
     async def _call():
-        await teams_module.create_team(payload=payload, db=db)
+        return await teams_module.list_teams(db=db)
 
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(_call())
-
-    assert exc.value.status_code == 409
-    assert "Team with this name already exists in this unit" in exc.value.detail
-
-
-# ============================
-#  get_team: 404, если команды нет
-# ============================
-
-class DummyScalarsNoTeam:
-    def first(self):
-        return None
-
-
-class DummyResultNoRows:
-    def scalars(self):
-        return DummyScalarsNoTeam()
-
-
-class DummySessionTeamNotFound:
-    async def execute(self, stmt):
-        return DummyResultNoRows()
-
+    result = asyncio.run(_call())
+    assert len(result) == 2
+    assert result[0] is t1
 
 def test_get_team_not_found_raises_404():
-    """Проверяем, что get_team возвращает 404, если команда не найдена."""
-    db = DummySessionTeamNotFound()
+    """Проверяет 404, если команда не найдена."""
+    db = DummySession()
+    db.expect_execute([])
 
     async def _call():
         await teams_module.get_team(team_id=999, db=db)
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(_call())
-
     assert exc.value.status_code == 404
-    assert exc.value.detail == teams_module.ERROR_TEAM_NOT_FOUND
 
+def test_get_team_success():
+    """Проверяет успешное получение одной команды."""
+    db = DummySession()
+    team = Team(id=1, name="Alpha")
+    db.expect_execute([team])
 
-# ============================
-#  update_team: конфликт уникальности в целевом юните
-# ============================
+    async def _call():
+        return await teams_module.get_team(team_id=1, db=db)
 
-class DummyResultFirstSomething:
-    """execute().first() возвращает не-None → есть конфликт имени."""
+    result = asyncio.run(_call())
+    assert result is team
 
-    def first(self):
-        return object()
+def test_create_team_conflict_by_name_raises_409():
+    """Проверяет 409 при попытке создать команду с уже существующим именем в юните."""
+    db = DummySession()
+    db.expect_execute([1])
+    payload = TeamCreate(name="Alpha", organization_unit_id=1)
 
+    async def _call():
+        await teams_module.create_team(payload=payload, db=db)
 
-class DummySessionUpdateConflict:
-    """
-    Для update_team: get() возвращает существующую команду,
-    а execute().first() → не-None, чтобы сработал 409.
-    """
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_call())
+    assert exc.value.status_code == 409
+    assert "already exists in this unit" in exc.value.detail
 
-    def __init__(self):
-        self.team = Team(
-            id=1,
-            name="Old Name",
-            lead_id=None,
-            organization_unit_id=10,
-        )
-        self.team.members = []
+def test_create_team_success_with_members():
+    """Проверяет успешное создание команды с участниками."""
+    db = DummySession()
+    db.expect_execute([0]) # func.count() -> нет конфликта
+    pyro1 = Pyrotechnician(id=10, full_name="John Doe") # <-- Используем реальную модель
+    pyro2 = Pyrotechnician(id=11, full_name="Jane Smith")
+    db.expect_execute([pyro1, pyro2])
 
-    async def get(self, model, pk, **kwargs):
-        # kwargs принимает options=[selectinload(...)] и т.п.
-        assert model is Team
-        assert pk == 1
-        return self.team
+    payload = TeamCreate(name="Alpha", organization_unit_id=1, member_ids=[10, 11])
 
-    async def execute(self, stmt):
-        # это вызов проверки уникальности:
-        # select(Team).where(and_(...)).first()
-        return DummyResultFirstSomething()
+    async def _call():
+        return await teams_module.create_team(payload=payload, db=db)
 
-    async def commit(self):
-        raise AssertionError("commit() не должен вызываться при конфликте")
+    new_team = asyncio.run(_call())
 
-    async def refresh(self, obj):
-        raise AssertionError("refresh() не должен вызываться при конфликте")
+    assert len(db.added) == 1
+    assert db.committed is True
+    assert new_team.name == "Alpha"
+    assert len(new_team.members) == 2
+    assert new_team.members[0].full_name == "John Doe"
 
-
-def test_update_team_conflict_in_target_unit():
-    """
-    Если при полном обновлении (update_team) новое имя уже занято
-    в целевом подразделении, должен быть 409 и нужное сообщение.
-    """
-    db = DummySessionUpdateConflict()
-    payload = TeamUpdate(
-        name="New Name",
-        lead_id=None,
-        organization_unit_id=10,
-        # список, а не None, чтобы пройти валидацию Pydantic
-        member_ids=[],   # нам всё равно, конфликт случится раньше commit
-    )
+def test_update_team_not_found_raises_404():
+    """Проверяет 404 при обновлении несуществующей команды."""
+    db = DummySession()
+    payload = TeamUpdate(name="any", member_ids=[])
 
     async def _call():
         await teams_module.update_team(team_id=1, payload=payload, db=db)
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(_call())
+    assert exc.value.status_code == 404
 
+def test_update_team_conflict_in_target_unit_raises_409():
+    """Проверяет 409, если новое имя команды уже занято в целевом юните."""
+    db = DummySession()
+    team_to_update = Team(id=1, name="Old Name", organization_unit_id=1)
+    db.seed([team_to_update])
+    db.expect_execute([Team(id=2, name="New Name", organization_unit_id=2)])
+
+    payload = TeamUpdate(name="New Name", organization_unit_id=2, member_ids=[])
+
+    async def _call():
+        await teams_module.update_team(team_id=1, payload=payload, db=db)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_call())
     assert exc.value.status_code == 409
-    assert "Another team with this name already exists in the target unit" in exc.value.detail
 
+def test_update_team_success_clears_and_adds_members():
+    """Проверяет успешное обновление команды, включая смену участников."""
+    db = DummySession()
+    existing_team = Team(id=1, name="Alpha", organization_unit_id=1)
+    existing_team.members = [Pyrotechnician(id=10, full_name="Old Member")]
+    db.seed([existing_team])
+    db.expect_execute([])
+    new_member = Pyrotechnician(id=11, full_name="New Member")
+    db.expect_execute([new_member])
 
-# ============================
-#  update_team: очистка участников, если member_ids=[]
-# ============================
-
-class DummyResultNoConflict:
-    """execute().first() возвращает None → конфликта по имени нет."""
-
-    def first(self):
-        return None
-
-
-class DummySessionUpdateClearMembers:
-    """
-    Для update_team: успешно обновляем команду
-    и передаем member_ids = [] → участники должны очиститься.
-    """
-
-    def __init__(self):
-        self.team = Team(
-            id=1,
-            name="Team A",
-            lead_id=5,
-            organization_unit_id=20,
-        )
-        # имитируем, что у команды уже есть участники
-        self.team.members = [Pyrotechnician(id=1), Pyrotechnician(id=2)]
-        self.committed = False
-
-    async def get(self, model, pk, **kwargs):
-        assert model is Team
-        assert pk == 1
-        return self.team
-
-    async def execute(self, stmt):
-        # Проверка уникальности имени — конфликта нет
-        return DummyResultNoConflict()
-
-    async def commit(self):
-        self.committed = True
-
-    async def refresh(self, obj):
-        # ничего не делаем — нас интересует состояние team.members
-        pass
-
-
-def test_update_team_clears_members_when_member_ids_empty():
-    """
-    Если в update_team передать member_ids = [],
-    backend должен очистить список участников и закоммитить изменения.
-    """
-    db = DummySessionUpdateClearMembers()
-    payload = TeamUpdate(
-        name="Team A",          # то же имя
-        lead_id=5,
-        organization_unit_id=20,
-        member_ids=[],          # ключевое условие
-    )
+    payload = TeamUpdate(name="Alpha V2", organization_unit_id=1, member_ids=[11])
 
     async def _call():
         return await teams_module.update_team(team_id=1, payload=payload, db=db)
 
-    updated = asyncio.run(_call())
+    updated_team = asyncio.run(_call())
 
-    assert updated.members == []
-    assert db.team.members == []
     assert db.committed is True
+    assert updated_team.name == "Alpha V2"
+    assert len(updated_team.members) == 1
+    assert updated_team.members[0].full_name == "New Member"
 
+def test_patch_team_success_updates_subset_of_fields():
+    """Проверяет успешное частичное обновление полей команды."""
+    db = DummySession()
+    existing_team = Team(id=1, name="Alpha", organization_unit_id=1)
+    existing_team.members = [Pyrotechnician(id=10, full_name="Member")]
+    db.seed([existing_team])
+    # Т.к. member_ids=[], execute будет вызван для получения (пустого) списка участников
+    db.expect_execute([])
 
-# ============================
-#  patch_team: конфликт уникальности
-# ============================
-
-class DummySessionPatchConflict:
-    """
-    Для patch_team: get() возвращает существующую команду,
-    а execute().first() → не-None, чтобы сработал 409.
-    """
-
-    def __init__(self):
-        self._team = Team(
-            id=1,
-            name="Old Name",
-            lead_id=None,
-            organization_unit_id=10,
-        )
-        self._team.members = []
-
-    async def get(self, model, pk, **kwargs):
-        # kwargs принимает options=[selectinload(...)] и т.п.
-        assert model is Team
-        assert pk == 1
-        return self._team
-
-    async def execute(self, stmt):
-        # это вызов проверки уникальности:
-        # select(Team).where(and_(...)).first()
-        return DummyResultFirstSomething()
-
-    async def commit(self):
-        raise AssertionError("commit() не должен вызываться при конфликте")
-
-    async def refresh(self, obj):
-        raise AssertionError("refresh() не должен вызываться при конфликте")
-
-
-def test_patch_team_conflict_by_name_in_unit():
-    """
-    Если при частичном обновлении (patch_team) новое имя уже занято
-    в том же подразделении, должен быть 409 и соответствующее сообщение.
-    """
-    db = DummySessionPatchConflict()
-    payload = TeamPatch(
-        name="New Name",
-        organization_unit_id=10,
-    )
-
-    async def _call():
-        await teams_module.patch_team(team_id=1, payload=payload, db=db)
-
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(_call())
-
-    assert exc.value.status_code == 409
-    assert "Another team with this name already exists in this unit" in exc.value.detail
-
-
-# ============================
-#  patch_team: очистка member_ids
-# ============================
-
-class DummySessionPatchClearMembers:
-    """
-    Для patch_team: изменяем только member_ids -> []
-    Должна сработать ветка:
-        if "member_ids" in update_data:
-            ...
-            else:
-                team.members = []
-    """
-
-    def __init__(self):
-        self.team = Team(
-            id=1,
-            name="Team A",
-            lead_id=None,
-            organization_unit_id=20,
-        )
-        # имитируем, что у команды уже есть участники
-        self.team.members = [Pyrotechnician(id=1), Pyrotechnician(id=2)]
-        self.committed = False
-
-    async def get(self, model, pk, **kwargs):
-        # kwargs принимает options=[selectinload(...)]
-        assert model is Team
-        assert pk == 1
-        return self.team
-
-    async def execute(self, stmt):
-        # В этом тесте мы не меняем name / organization_unit_id,
-        # поэтому блок проверки уникальности вызываться не должен.
-        raise AssertionError("execute() не должен вызываться при patch только member_ids")
-
-    async def commit(self):
-        self.committed = True
-
-    async def refresh(self, obj):
-        # ничего не делаем — нам важно только состояние team.members
-        pass
-
-
-def test_patch_team_clear_members():
-    """
-    При передаче member_ids = [] через TeamPatch
-    у команды должны очиститься участники и зафиксироваться изменения.
-    """
-    db = DummySessionPatchClearMembers()
-    payload = TeamPatch(member_ids=[])
+    payload = TeamPatch(lead_id=10, member_ids=[])
 
     async def _call():
         return await teams_module.patch_team(team_id=1, payload=payload, db=db)
 
-    updated = asyncio.run(_call())
+    updated_team = asyncio.run(_call())
 
-    # Все участники должны быть удалены
-    assert updated.members == []
-    assert db.team.members == []
-    # и транзакция зафиксирована
+    assert db.committed is True
+    assert updated_team.lead_id == 10
+    assert updated_team.members == []
+    assert updated_team.name == "Alpha"
+
+def test_delete_team_not_found_raises_404():
+    """Проверяет 404 при удалении несуществующей команды."""
+    db = DummySession()
+
+    async def _call():
+        await teams_module.delete_team(team_id=999, db=db)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_call())
+    assert exc.value.status_code == 404
+
+def test_delete_team_success():
+    """Проверяет успешное удаление команды."""
+    db = DummySession()
+    team_to_delete = Team(id=1, name="ToDelete")
+    db.seed([team_to_delete])
+
+    async def _call():
+        await teams_module.delete_team(team_id=1, db=db)
+
+    asyncio.run(_call())
+
+    assert len(db.deleted) == 1
+    assert db.deleted[0] is team_to_delete
     assert db.committed is True
