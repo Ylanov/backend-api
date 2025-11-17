@@ -13,3 +13,4 @@ pydantic-settings
 prometheus-fastapi-instrumentator
 httpx
 aiofiles
+pytest
