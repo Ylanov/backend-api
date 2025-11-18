@@ -42,27 +42,37 @@ import { RequireAuth, useAuth } from "./auth/AuthProvider";
 import Sidebar from "./components/Sidebar";
 import NotificationsPopover from "./components/NotificationsPopover";
 
-/** ──────────────────────────────────────────────────────────────────────
- * ЛЁГКИЙ виджет уведомлений (мемоизирован), чтобы не ререндерить весь App
- * ────────────────────────────────────────────────────────────────────── */
 import { useQuery } from "@tanstack/react-query";
 import { fetchNotifications } from "./services/api";
 import type { Notification } from "./types";
 
-const NotificationsWidget = memo(function NotificationsWidget({
-  onOpen,
-}: {
-  onOpen: (event: MouseEvent<HTMLElement>) => void;
-}) {
-  // Используем useQuery для загрузки и периодического обновления данных.
+/** ──────────────────────────────────────────────────────────────────────
+ * Типы пропсов
+ * ────────────────────────────────────────────────────────────────────── */
+interface NotificationsWidgetProps {
+  readonly onOpen: (event: MouseEvent<HTMLElement>) => void;
+}
+
+interface RequireAdminProps {
+  readonly children: JSX.Element;
+}
+
+/** ──────────────────────────────────────────────────────────────────────
+ * Лёгкий мемоизированный виджет уведомлений
+ * ────────────────────────────────────────────────────────────────────── */
+const NotificationsWidget = memo(function NotificationsWidget(
+  props: NotificationsWidgetProps
+) {
+  const { onOpen } = props;
+
   const { data: notifications = [] } = useQuery<Notification[]>({
     queryKey: ["notifications"],
     queryFn: fetchNotifications,
-    // При необходимости можно включить автообновление:
+    // При необходимости можно включить периодическое обновление:
     // refetchInterval: 30000,
   });
 
-  const unread = useMemo(
+  const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.is_read).length,
     [notifications]
   );
@@ -70,7 +80,7 @@ const NotificationsWidget = memo(function NotificationsWidget({
   return (
     <Tooltip title="Уведомления">
       <IconButton color="inherit" onClick={onOpen}>
-        <Badge badgeContent={unread} color="error">
+        <Badge badgeContent={unreadCount} color="error">
           <NotificationsIcon />
         </Badge>
       </IconButton>
@@ -80,10 +90,16 @@ const NotificationsWidget = memo(function NotificationsWidget({
 
 const MINI_WIDTH = 72;
 
-// Только для администратора
-function RequireAdmin({ children }: { children: JSX.Element }) {
+/** ──────────────────────────────────────────────────────────────────────
+ * Обёртка для страниц, доступных только администратору
+ * ────────────────────────────────────────────────────────────────────── */
+function RequireAdmin({ children }: RequireAdminProps) {
   const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   if (!user.is_admin) {
     return (
       <Box sx={{ p: { xs: 2, sm: 3 } }}>
@@ -96,27 +112,40 @@ function RequireAdmin({ children }: { children: JSX.Element }) {
       </Box>
     );
   }
+
   return children;
 }
 
+/** ──────────────────────────────────────────────────────────────────────
+ * Корневой компонент приложения
+ * ────────────────────────────────────────────────────────────────────── */
 export default function App() {
   const theme = useTheme();
-  const mdUp = useMediaQuery(theme.breakpoints.up("md"));
-  const smUp = useMediaQuery(theme.breakpoints.up("sm"));
+  const isMediumUp = useMediaQuery(theme.breakpoints.up("md"));
+  const isSmallUp = useMediaQuery(theme.breakpoints.up("sm"));
 
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  // Popover для уведомлений
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const handleOpenPopover = (event: MouseEvent<HTMLElement>) =>
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleOpenPopover = (event: MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
-  const handleClosePopover = () => setAnchorEl(null);
+  };
+
+  const handleClosePopover = () => {
+    setAnchorEl(null);
+  };
 
   const handleLogout = () => {
     logout();
     navigate("/login", { replace: true });
+  };
+
+  const toggleMobile = () => {
+    setMobileOpen((previous) => !previous);
   };
 
   // Отдельный рендер страницы логина — без AppBar и Sidebar
@@ -132,10 +161,6 @@ export default function App() {
     );
   }
 
-  // Мобильный сайдбар
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const toggleMobile = () => setMobileOpen((previous) => !previous);
-
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <CssBaseline />
@@ -143,10 +168,13 @@ export default function App() {
       <AppBar
         position="fixed"
         color="primary"
-        sx={{ zIndex: (currentTheme) => currentTheme.zIndex.drawer + 1, overflow: "hidden" }}
+        sx={{
+          zIndex: (currentTheme) => currentTheme.zIndex.drawer + 1,
+          overflow: "hidden",
+        }}
       >
         <Toolbar sx={{ minHeight: { xs: 56, sm: 64 }, overflow: "hidden" }}>
-          {!mdUp && (
+          {!isMediumUp && (
             <IconButton
               color="inherit"
               edge="start"
@@ -158,9 +186,15 @@ export default function App() {
             </IconButton>
           )}
 
-          <DashboardIcon sx={{ marginRight: 1, display: { xs: "none", sm: "inline-flex" } }} />
+          <DashboardIcon
+            sx={{
+              marginRight: 1,
+              display: { xs: "none", sm: "inline-flex" },
+            }}
+          />
+
           <Typography
-            variant={smUp ? "h6" : "subtitle1"}
+            variant={isSmallUp ? "h6" : "subtitle1"}
             noWrap
             sx={{
               flexGrow: 1,
@@ -178,7 +212,10 @@ export default function App() {
             <>
               <Typography
                 variant="body2"
-                sx={{ marginRight: 2, display: { xs: "none", sm: "block" } }}
+                sx={{
+                  marginRight: 2,
+                  display: { xs: "none", sm: "block" },
+                }}
               >
                 {user.full_name}
               </Typography>
@@ -187,7 +224,10 @@ export default function App() {
                   label="Администратор"
                   size="small"
                   color="secondary"
-                  sx={{ marginRight: 2, display: { xs: "none", sm: "inline-flex" } }}
+                  sx={{
+                    marginRight: 2,
+                    display: { xs: "none", sm: "inline-flex" },
+                  }}
                 />
               )}
             </>
@@ -195,13 +235,17 @@ export default function App() {
 
           <NotificationsWidget onOpen={handleOpenPopover} />
 
-          {smUp ? (
+          {isSmallUp ? (
             <Button color="inherit" onClick={handleLogout}>
               Выйти
             </Button>
           ) : (
             <Tooltip title="Выйти">
-              <IconButton color="inherit" onClick={handleLogout} aria-label="Выйти">
+              <IconButton
+                color="inherit"
+                onClick={handleLogout}
+                aria-label="Выйти"
+              >
                 <LogoutIcon />
               </IconButton>
             </Tooltip>
@@ -216,7 +260,7 @@ export default function App() {
         isAdmin={Boolean(user?.is_admin)}
       />
 
-      {/* Контент. Отступ слева под мини-меню и спейсер под AppBar */}
+      {/* Основной контент: отступ слева под мини-меню и спейсер под AppBar */}
       <Box
         component="main"
         sx={{
@@ -264,16 +308,12 @@ export default function App() {
           />
           <Route
             path="/tasks/:id"
-            element>
-            <Route
-              index
-              element={
-                <RequireAuth>
-                  <TaskDetailPage />
-                </RequireAuth>
-              }
-            />
-          </Route>
+            element={
+              <RequireAuth>
+                <TaskDetailPage />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/zones"
             element={
@@ -336,6 +376,7 @@ export default function App() {
         </Routes>
       </Box>
 
+      {/* Popover уведомлений */}
       <NotificationsPopover
         notifications={[]}
         anchorEl={anchorEl}
