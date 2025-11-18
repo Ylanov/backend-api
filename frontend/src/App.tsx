@@ -1,5 +1,5 @@
 // frontend/src/App.tsx
-import { useMemo } from "react";
+import { memo, useMemo, useState, type MouseEvent } from "react";
 import {
   Routes,
   Route,
@@ -45,29 +45,25 @@ import NotificationsPopover from "./components/NotificationsPopover";
 /** ──────────────────────────────────────────────────────────────────────
  * ЛЁГКИЙ виджет уведомлений (мемоизирован), чтобы не ререндерить весь App
  * ────────────────────────────────────────────────────────────────────── */
-import { memo, useState } from "react"; // <--- ИЗМЕНЕНИЕ: Убрали useEffect
-import { useQuery } from "@tanstack/react-query"; // <--- ИЗМЕНЕНИЕ: Добавили импорт useQuery
+import { useQuery } from "@tanstack/react-query";
 import { fetchNotifications } from "./services/api";
 import type { Notification } from "./types";
 
-// <--- ИЗМЕНЕНИЕ: Вся логика виджета переписана на useQuery
 const NotificationsWidget = memo(function NotificationsWidget({
   onOpen,
 }: {
-  onOpen: (e: React.MouseEvent<HTMLElement>) => void;
+  onOpen: (event: MouseEvent<HTMLElement>) => void;
 }) {
   // Используем useQuery для загрузки и периодического обновления данных.
-  // Это надежный способ, который не вызывает "шторм" запросов.
-  const { data: notifications = [] } = useQuery({
-    queryKey: ['notifications'],
+  const { data: notifications = [] } = useQuery<Notification[]>({
+    queryKey: ["notifications"],
     queryFn: fetchNotifications,
-    // При желании можно включить авто-обновление раз в 30 секунд.
-    // Сначала убедимся, что все работает стабильно.
+    // При необходимости можно включить автообновление:
     // refetchInterval: 30000,
   });
 
   const unread = useMemo(
-    () => notifications.filter((n) => !n.is_read).length,
+    () => notifications.filter((notification) => !notification.is_read).length,
     [notifications]
   );
 
@@ -112,10 +108,10 @@ export default function App() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  // popover для уведомлений (сам список рисует NotificationsPopover)
+  // Popover для уведомлений
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const handleOpenPopover = (e: React.MouseEvent<HTMLElement>) =>
-    setAnchorEl(e.currentTarget);
+  const handleOpenPopover = (event: MouseEvent<HTMLElement>) =>
+    setAnchorEl(event.currentTarget);
   const handleClosePopover = () => setAnchorEl(null);
 
   const handleLogout = () => {
@@ -123,7 +119,7 @@ export default function App() {
     navigate("/login", { replace: true });
   };
 
-  // отдельный рендер страницы логина — без AppBar/Sidebar
+  // Отдельный рендер страницы логина — без AppBar и Sidebar
   if (location.pathname === "/login") {
     return (
       <Box sx={{ display: "flex" }}>
@@ -136,9 +132,9 @@ export default function App() {
     );
   }
 
-  // мобильный сайдбар
+  // Мобильный сайдбар
   const [mobileOpen, setMobileOpen] = useState(false);
-  const toggleMobile = () => setMobileOpen((v) => !v);
+  const toggleMobile = () => setMobileOpen((previous) => !previous);
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
@@ -147,7 +143,7 @@ export default function App() {
       <AppBar
         position="fixed"
         color="primary"
-        sx={{ zIndex: (t) => t.zIndex.drawer + 1, overflow: "hidden" }}
+        sx={{ zIndex: (currentTheme) => currentTheme.zIndex.drawer + 1, overflow: "hidden" }}
       >
         <Toolbar sx={{ minHeight: { xs: 56, sm: 64 }, overflow: "hidden" }}>
           {!mdUp && (
@@ -155,14 +151,14 @@ export default function App() {
               color="inherit"
               edge="start"
               onClick={toggleMobile}
-              sx={{ mr: 1 }}
+              sx={{ marginRight: 1 }}
               aria-label="Открыть меню"
             >
               <MenuIcon />
             </IconButton>
           )}
 
-          <DashboardIcon sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }} />
+          <DashboardIcon sx={{ marginRight: 1, display: { xs: "none", sm: "inline-flex" } }} />
           <Typography
             variant={smUp ? "h6" : "subtitle1"}
             noWrap
@@ -182,7 +178,7 @@ export default function App() {
             <>
               <Typography
                 variant="body2"
-                sx={{ mr: 2, display: { xs: "none", sm: "block" } }}
+                sx={{ marginRight: 2, display: { xs: "none", sm: "block" } }}
               >
                 {user.full_name}
               </Typography>
@@ -191,13 +187,12 @@ export default function App() {
                   label="Администратор"
                   size="small"
                   color="secondary"
-                  sx={{ mr: 2, display: { xs: "none", sm: "inline-flex" } }}
+                  sx={{ marginRight: 2, display: { xs: "none", sm: "inline-flex" } }}
                 />
               )}
             </>
           )}
 
-          {/* Мемокомпонент – не триггерит ререндер всего App */}
           <NotificationsWidget onOpen={handleOpenPopover} />
 
           {smUp ? (
@@ -214,24 +209,24 @@ export default function App() {
         </Toolbar>
       </AppBar>
 
-      {/* Левое меню: мини на десктопе, выезжающее на мобиле */}
+      {/* Левое меню: мини на десктопе, выезжающее на мобильных устройствах */}
       <Sidebar
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
-        isAdmin={!!user?.is_admin}
+        isAdmin={Boolean(user?.is_admin)}
       />
 
-      {/* Контент. Отступ слева под мини-меню + спейсер под AppBar */}
+      {/* Контент. Отступ слева под мини-меню и спейсер под AppBar */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          px: { xs: 1.5, md: 3 },
-          py: { xs: 2, md: 3 },
-          ml: { xs: 0, md: `${MINI_WIDTH}px` },
+          paddingX: { xs: 1.5, md: 3 },
+          paddingY: { xs: 2, md: 3 },
+          marginLeft: { xs: 0, md: `${MINI_WIDTH}px` },
         }}
       >
-        {/* Spacer под шапку — точно равен высоте Toolbar */}
+        {/* Спейсер под шапку — равен высоте Toolbar */}
         <Toolbar sx={{ minHeight: { xs: 56, sm: 64 } }} />
 
         <Routes>
@@ -269,12 +264,16 @@ export default function App() {
           />
           <Route
             path="/tasks/:id"
-            element={
-              <RequireAuth>
-                <TaskDetailPage />
-              </RequireAuth>
-            }
-          />
+            element>
+            <Route
+              index
+              element={
+                <RequireAuth>
+                  <TaskDetailPage />
+                </RequireAuth>
+              }
+            />
+          </Route>
           <Route
             path="/zones"
             element={
@@ -323,7 +322,7 @@ export default function App() {
             path="*"
             element={
               <RequireAuth>
-                <Box sx={{ p: { xs: 1, sm: 0 } }}>
+                <Box sx={{ padding: { xs: 1, sm: 0 } }}>
                   <Typography variant="h5" gutterBottom>
                     Страница не найдена
                   </Typography>
@@ -337,9 +336,8 @@ export default function App() {
         </Routes>
       </Box>
 
-      {/* Popover оставляем как есть — он не влияет на рендер Routes */}
       <NotificationsPopover
-        notifications={[]} // сам список подгружает внутри попапа (если нужно — можешь переиспользовать NotificationsWidget state)
+        notifications={[]}
         anchorEl={anchorEl}
         onClose={handleClosePopover}
         onMarkAsRead={() => {}}
