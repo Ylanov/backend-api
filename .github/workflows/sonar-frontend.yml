@@ -26,9 +26,13 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    # Общие env для всего job
     env:
-      VITE_API_BASE_URL: http://test-api
+      # Базовый URL для API — совпадает с тем, что ожидают тесты
+      VITE_API_BASE_URL: /api
+      # Ключ Яндекс.Карт, который ты добавил в secrets
       VITE_YMAPS_API_KEY: ${{ secrets.VITE_YMAPS_API_KEY }}
+
     defaults:
       run:
         working-directory: frontend
