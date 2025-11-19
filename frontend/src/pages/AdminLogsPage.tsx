@@ -29,20 +29,11 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { useNotification } from "../notifications/NotificationProvider";
-import {
-  fetchLoginEvents,
-  fetchAuditLogs,
-  getMe,
-} from "../services/api";
-import type {
-  LoginEvent,
-  AuditLogEntry,
-  Pyrotechnician,
-} from "../types";
+import { fetchLoginEvents, fetchAuditLogs, getMe } from "../services/api";
+import type { LoginEvent, AuditLogEntry, Pyrotechnician } from "../types";
 import PageHeader from "../components/PageHeader";
 
 type TabKey = "logins" | "audit";
-
 type LoginSuccessFilter = "all" | "success" | "fail";
 
 interface LoginFilters {
@@ -108,7 +99,7 @@ export default function AdminLogsPage() {
             navigate("/");
           }
         }
-      } catch (e: any) {
+      } catch {
         if (!cancelled) {
           notifyError(
             "Не удалось определить текущего пользователя, требуется вход."
@@ -127,14 +118,7 @@ export default function AdminLogsPage() {
 
   // --- React Query: журнал входов ---
 
-  const {
-    data: loginEvents = [],
-    isLoading: isLoginInitialLoading,
-    isFetching: isLoginFetching,
-    isError: isLoginError,
-    error: loginError,
-    refetch: refetchLoginEvents,
-  } = useQuery<LoginEvent[], any>({
+  const loginQuery = useQuery<LoginEvent[], Error>({
     queryKey: ["admin-login-events", loginFilters],
     queryFn: ({ signal }) => {
       const successValue =
@@ -152,25 +136,29 @@ export default function AdminLogsPage() {
         { signal }
       );
     },
-    enabled: !!me?.is_admin && tab === "logins",
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось загрузить журнал входов.";
-      notifyError(msg);
-    },
+    enabled: Boolean(me?.is_admin && tab === "logins"),
   });
+
+  useEffect(() => {
+    if (loginQuery.isError && loginQuery.error) {
+      const message =
+        loginQuery.error.message || "Не удалось загрузить журнал входов.";
+      notifyError(message);
+    }
+  }, [loginQuery.isError, loginQuery.error, notifyError]);
+
+  const loginEvents = (loginQuery.data ?? []) as LoginEvent[];
+  const isLoginInitialLoading = loginQuery.isLoading;
+  const isLoginFetching = loginQuery.isFetching;
+  const isLoginError = loginQuery.isError;
+  const loginError = loginQuery.error;
+  const refetchLoginEvents = loginQuery.refetch;
 
   const loginLoading = isLoginInitialLoading || isLoginFetching;
 
   // --- React Query: аудит-лог ---
 
-  const {
-    data: auditLogs = [],
-    isLoading: isAuditInitialLoading,
-    isFetching: isAuditFetching,
-    isError: isAuditError,
-    error: auditError,
-    refetch: refetchAuditLogs,
-  } = useQuery<AuditLogEntry[], any>({
+  const auditQuery = useQuery<AuditLogEntry[], Error>({
     queryKey: ["admin-audit-logs", auditFilters],
     queryFn: ({ signal }) =>
       fetchAuditLogs(
@@ -181,12 +169,23 @@ export default function AdminLogsPage() {
         },
         { signal }
       ),
-    enabled: !!me?.is_admin && tab === "audit",
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось загрузить аудит-лог.";
-      notifyError(msg);
-    },
+    enabled: Boolean(me?.is_admin && tab === "audit"),
   });
+
+  useEffect(() => {
+    if (auditQuery.isError && auditQuery.error) {
+      const message =
+        auditQuery.error.message || "Не удалось загрузить аудит-лог.";
+      notifyError(message);
+    }
+  }, [auditQuery.isError, auditQuery.error, notifyError]);
+
+  const auditLogs = (auditQuery.data ?? []) as AuditLogEntry[];
+  const isAuditInitialLoading = auditQuery.isLoading;
+  const isAuditFetching = auditQuery.isFetching;
+  const isAuditError = auditQuery.isError;
+  const auditError = auditQuery.error;
+  const refetchAuditLogs = auditQuery.refetch;
 
   const auditLoading = isAuditInitialLoading || isAuditFetching;
 
@@ -226,7 +225,10 @@ export default function AdminLogsPage() {
         <Stack direction="row" spacing={2} alignItems="center" mb={2}>
           <Typography variant="h6">Журнал входов</Typography>
           <Tooltip title="Обновить">
-            <IconButton onClick={() => refetchLoginEvents()} disabled={loginLoading}>
+            <IconButton
+              onClick={() => refetchLoginEvents()}
+              disabled={loginLoading}
+            >
               <RefreshIcon />
             </IconButton>
           </Tooltip>
@@ -241,17 +243,15 @@ export default function AdminLogsPage() {
           <TextField
             label="Email"
             value={loginEmail}
-            onChange={(e) => setLoginEmail(e.target.value)}
+            onChange={(event) => setLoginEmail(event.target.value)}
             size="small"
           />
           <TextField
             label="Статус"
             select
             value={loginSuccessFilter}
-            onChange={(e) =>
-              setLoginSuccessFilter(
-                e.target.value as LoginSuccessFilter
-              )
+            onChange={(event) =>
+              setLoginSuccessFilter(event.target.value as LoginSuccessFilter)
             }
             size="small"
             SelectProps={{ native: true }}
@@ -266,7 +266,7 @@ export default function AdminLogsPage() {
             size="small"
             InputLabelProps={{ shrink: true }}
             value={loginDateFrom}
-            onChange={(e) => setLoginDateFrom(e.target.value)}
+            onChange={(event) => setLoginDateFrom(event.target.value)}
           />
           <TextField
             label="Дата по"
@@ -274,7 +274,7 @@ export default function AdminLogsPage() {
             size="small"
             InputLabelProps={{ shrink: true }}
             value={loginDateTo}
-            onChange={(e) => setLoginDateTo(e.target.value)}
+            onChange={(event) => setLoginDateTo(event.target.value)}
           />
           <Button
             variant="outlined"
@@ -287,8 +287,7 @@ export default function AdminLogsPage() {
 
         {isLoginError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {(loginError as any)?.message ||
-              "Не удалось загрузить журнал входов."}
+            {loginError?.message || "Не удалось загрузить журнал входов."}
           </Alert>
         )}
 
@@ -315,35 +314,27 @@ export default function AdminLogsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {loginEvents.map((e) => (
-                  <TableRow key={e.id} hover>
+                {loginEvents.map((event) => (
+                  <TableRow key={event.id} hover>
                     <TableCell>
-                      {new Date(e.created_at).toLocaleString()}
+                      {new Date(event.created_at).toLocaleString()}
                     </TableCell>
-                    <TableCell>{e.email ?? "—"}</TableCell>
-                    <TableCell>{e.ip_address ?? "—"}</TableCell>
+                    <TableCell>{event.email ?? "—"}</TableCell>
+                    <TableCell>{event.ip_address ?? "—"}</TableCell>
                     <TableCell>
-                      {e.user_agent ? (
-                        <Tooltip title={e.user_agent}>
-                          <span>{e.user_agent.slice(0, 40)}…</span>
+                      {event.user_agent ? (
+                        <Tooltip title={event.user_agent}>
+                          <span>{event.user_agent.slice(0, 40)}…</span>
                         </Tooltip>
                       ) : (
                         "—"
                       )}
                     </TableCell>
                     <TableCell>
-                      {e.success ? (
-                        <Chip
-                          label="Успешно"
-                          color="success"
-                          size="small"
-                        />
+                      {event.success ? (
+                        <Chip label="Успешно" color="success" size="small" />
                       ) : (
-                        <Chip
-                          label="Ошибка"
-                          color="error"
-                          size="small"
-                        />
+                        <Chip label="Ошибка" color="error" size="small" />
                       )}
                     </TableCell>
                   </TableRow>
@@ -362,7 +353,10 @@ export default function AdminLogsPage() {
         <Stack direction="row" spacing={2} alignItems="center" mb={2}>
           <Typography variant="h6">Аудит действий</Typography>
           <Tooltip title="Обновить">
-            <IconButton onClick={() => refetchAuditLogs()} disabled={auditLoading}>
+            <IconButton
+              onClick={() => refetchAuditLogs()}
+              disabled={auditLoading}
+            >
               <RefreshIcon />
             </IconButton>
           </Tooltip>
@@ -377,7 +371,7 @@ export default function AdminLogsPage() {
           <TextField
             label="Действие (contains)"
             value={auditAction}
-            onChange={(e) => setAuditAction(e.target.value)}
+            onChange={(event) => setAuditAction(event.target.value)}
             size="small"
           />
           <TextField
@@ -386,7 +380,7 @@ export default function AdminLogsPage() {
             size="small"
             InputLabelProps={{ shrink: true }}
             value={auditDateFrom}
-            onChange={(e) => setAuditDateFrom(e.target.value)}
+            onChange={(event) => setAuditDateFrom(event.target.value)}
           />
           <TextField
             label="Дата по"
@@ -394,7 +388,7 @@ export default function AdminLogsPage() {
             size="small"
             InputLabelProps={{ shrink: true }}
             value={auditDateTo}
-            onChange={(e) => setAuditDateTo(e.target.value)}
+            onChange={(event) => setAuditDateTo(event.target.value)}
           />
           <Button
             variant="outlined"
@@ -407,8 +401,7 @@ export default function AdminLogsPage() {
 
         {isAuditError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {(auditError as any)?.message ||
-              "Не удалось загрузить аудит-лог."}
+            {auditError?.message || "Не удалось загрузить аудит-лог."}
           </Alert>
         )}
 
@@ -484,7 +477,7 @@ export default function AdminLogsPage() {
         <CardContent sx={{ pb: 0 }}>
           <Tabs
             value={tab}
-            onChange={(_, v: TabKey) => setTab(v)}
+            onChange={(_, value: TabKey) => setTab(value)}
             variant="scrollable"
             scrollButtons="auto"
           >
