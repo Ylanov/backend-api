@@ -35,7 +35,7 @@ type Props = {
 
 function normalizeLight(s: string): string {
   // «лёгкая» нормализация: trim + схлопывание пробелов
-  return s.trim().replace(/\s+/g, " ");
+  return s.trim().replaceAll(/\s+/g, " ");
 }
 
 type CreateResult = {

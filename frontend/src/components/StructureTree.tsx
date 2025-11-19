@@ -36,7 +36,7 @@ function parseNumericId(s: string): number | null {
   if (!s) return null;
   const match = s.match(/^(unit|team)-(\d+)$/);
   if (match && match[2]) {
-    const n = parseInt(match[2], 10);
+    const n = Number.parseInt(match[2], 10);
     return Number.isNaN(n) ? null : n;
   }
   return null;
