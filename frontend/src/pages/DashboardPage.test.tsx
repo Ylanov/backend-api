@@ -2,7 +2,8 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { screen, render, fireEvent } from "@testing-library/react";
 import DashboardPage from "./DashboardPage";
-import { renderWithProviders } from "@/test-utils";
+import { renderWithProviders } from "../test-utils";
+import type { Task, Team, Zone } from "../types";
 
 // ======================================================================
 //                      CORRECT MOCK: AuthProvider
@@ -14,19 +15,21 @@ vi.mock("../auth/AuthProvider", () => ({
     setUser: vi.fn(),
     logout: vi.fn(),
   }),
-  AuthProvider: ({ children }: any) => <div>{children}</div>,
+  AuthProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 // ======================================================================
 //                          MOCK YANDEX MAPS
 // ======================================================================
 vi.mock("@pbe/react-yandex-maps", () => ({
-  YMaps: ({ children }: any) => <div data-testid="ymaps">{children}</div>,
-  Map: ({ children }: any) => <div data-testid="map">{children}</div>,
-  Polygon: ({ onClick }: any) => (
+  YMaps: ({ children }: { children: React.ReactNode }) => <div data-testid="ymaps">{children}</div>,
+  Map: ({ children }: { children: React.ReactNode }) => <div data-testid="map">{children}</div>,
+  Polygon: ({ onClick }: { onClick?: () => void }) => (
+
     <div data-testid="polygon" onClick={() => onClick?.()} />
   ),
-  Placemark: ({ onClick }: any) => (
+  Placemark: ({ onClick }: { onClick?: () => void }) => (
+
     <div data-testid="placemark" onClick={() => onClick?.()} />
   ),
 }));
@@ -34,13 +37,6 @@ vi.mock("@pbe/react-yandex-maps", () => ({
 // ======================================================================
 //                              MOCK API
 // ======================================================================
-vi.mock("../services/api", () => ({
-  fetchTasks: vi.fn(),
-  fetchTeams: vi.fn(),
-  fetchZones: vi.fn(),
-  fetchZoneDetails: vi.fn(),
-}));
-
 import {
   fetchTasks,
   fetchTeams,
@@ -48,135 +44,150 @@ import {
   fetchZoneDetails,
 } from "../services/api";
 
-// ======================================================================
-//                        beforeEach
-// ======================================================================
-beforeEach(() => {
-  vi.clearAllMocks();
+vi.mock("../services/api");
 
-  fetchTasks.mockResolvedValue([]);
-  fetchTeams.mockResolvedValue([]);
-  fetchZones.mockResolvedValue([]);
-  fetchZoneDetails.mockResolvedValue({
-    id: 99,
-    name: "Зона X",
-    description: "Описание зоны",
-    tasks: [],
-    points: [],
+const mockFetchTasks = vi.mocked(fetchTasks);
+const mockFetchTeams = vi.mocked(fetchTeams);
+const mockFetchZones = vi.mocked(fetchZones);
+const mockFetchZoneDetails = vi.mocked(fetchZoneDetails);
+
+describe("DashboardPage Tests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockFetchTasks.mockResolvedValue([]);
+    mockFetchTeams.mockResolvedValue([]);
+    mockFetchZones.mockResolvedValue([]);
+    mockFetchZoneDetails.mockResolvedValue({
+      id: 99,
+      name: "Зона X",
+      description: "Описание зоны",
+      tasks: [],
+      points: [],
+    });
   });
-});
 
-// ======================================================================
-//                         1. Заголовок
-// ======================================================================
-test("renders dashboard title", () => {
-  render(renderWithProviders(<DashboardPage />));
-  expect(screen.getByText(/оперативная карта/i)).toBeInTheDocument();
-});
+  // 1. Заголовок
+  test("renders dashboard title", () => {
+    render(renderWithProviders(<DashboardPage />));
+    expect(screen.getByText(/оперативная карта/i)).toBeInTheDocument();
+  });
 
-// ======================================================================
-//                        2. Spinner загрузки
-// ======================================================================
-test("shows loading Spinner", () => {
-  fetchTasks.mockReturnValue(new Promise(() => {}));
-  fetchTeams.mockReturnValue(new Promise(() => {}));
-  fetchZones.mockReturnValue(new Promise(() => {}));
+  // 2. Spinner загрузки
+  test("shows loading Spinner", () => {
+    mockFetchTasks.mockReturnValue(new Promise(() => {}));
+    mockFetchTeams.mockReturnValue(new Promise(() => {}));
+    mockFetchZones.mockReturnValue(new Promise(() => {}));
 
-  render(renderWithProviders(<DashboardPage />));
+    render(renderWithProviders(<DashboardPage />));
 
-  expect(screen.getAllByRole("progressbar").length).toBeGreaterThan(0);
-});
+    expect(screen.getAllByRole("progressbar").length).toBeGreaterThan(0);
+  });
 
-// ======================================================================
-//                            3. Ошибка API
-// ======================================================================
-test("shows error when API fails", async () => {
-  fetchTasks.mockRejectedValue(new Error("Fail"));
+  // 3. Ошибка API
+  test("shows error when API fails", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockFetchTasks.mockRejectedValue(new Error("Fail"));
 
-  render(renderWithProviders(<DashboardPage />));
+    render(renderWithProviders(<DashboardPage />));
 
-  expect(await screen.findByText(/fail/i)).toBeInTheDocument();
-});
+    expect(await screen.findByText(/fail/i)).toBeInTheDocument();
+    consoleSpy.mockRestore();
+  });
 
-// ======================================================================
-//                         4. Статистика
-// ======================================================================
-test("renders statistics correctly", async () => {
-  fetchTasks.mockResolvedValue([
-    { id: 1, title: "A", status: "in_progress", team_id: 10, zone: null },
-  ]);
+  // 4. Статистика
+  test("renders statistics correctly", async () => {
+    // Используем 'as any' для статусов и приоритетов, чтобы обойти строгую типизацию в моках,
+    // так как для теста важны строковые значения, совпадающие с тем, что ожидает UI.
+    const tasksMock = [
+      {
+        id: 1,
+        title: "A",
+        status: "in_progress",
+        priority: "medium",
+        team_id: 10,
+        zone: null,
+      },
+    ] as unknown as Task[];
 
-  fetchTeams.mockResolvedValue([
-    { id: 10, name: "Team A" },
-    { id: 11, name: "Team B" },
-  ]);
+    const teamsMock = [
+      { id: 10, name: "Team A", organization_unit_id: 1, members: [] },
+      { id: 11, name: "Team B", organization_unit_id: 1, members: [] },
+    ] as Team[];
 
-  render(renderWithProviders(<DashboardPage />));
+    mockFetchTasks.mockResolvedValue(tasksMock);
+    mockFetchTeams.mockResolvedValue(teamsMock);
 
-  const numbers = await screen.findAllByText("1");
-  expect(numbers.length).toBeGreaterThan(0);
-});
+    render(renderWithProviders(<DashboardPage />));
 
-// ======================================================================
-//                      5. Карта, полигоны, точки
-// ======================================================================
-test("renders map, polygons and placemarks", async () => {
-  fetchZones.mockResolvedValue([
-    { id: 5, name: "Zone A", points: [{ lat: 55, lng: 37 }] },
-  ]);
+    const numbers = await screen.findAllByText("1");
+    expect(numbers.length).toBeGreaterThan(0);
+  });
 
-  fetchTasks.mockResolvedValue([
-    {
-      id: 1,
-      title: "Test Task",
-      status: "in_progress",
-      priority: "normal",
-      team_id: null,
-      zone: { points: [{ lat: 55, lng: 37 }] },
-    },
-  ]);
+  // 5. Карта, полигоны, точки
+  test("renders map, polygons and placemarks", async () => {
+    const zonesMock = [
+      { id: 5, name: "Zone A", description: "desc", points: [{ lat: 55, lng: 37 }] },
+    ] as Zone[];
 
-  render(renderWithProviders(<DashboardPage />));
+    const tasksMock = [
+      {
+        id: 1,
+        title: "Test Task",
+        status: "in_progress",
+        priority: "medium",
+        team_id: null,
+        zone: { id: 5, name: "Zone A", description: "", points: [{ lat: 55, lng: 37 }] },
+      },
+    ] as unknown as Task[];
 
-  expect(await screen.findByTestId("map")).toBeInTheDocument();
-  expect(await screen.findByTestId("polygon")).toBeInTheDocument();
-  expect(await screen.findByTestId("placemark")).toBeInTheDocument();
-});
+    mockFetchZones.mockResolvedValue(zonesMock);
+    mockFetchTasks.mockResolvedValue(tasksMock);
 
-// ======================================================================
-//                6. Клик по задаче — открытие drawer
-// ======================================================================
-test("opens task drawer on placemark click", async () => {
-  fetchTasks.mockResolvedValue([
-    {
-      id: 10,
-      title: "Test Task",
-      status: "in_progress",
-      priority: "normal",
-      team_id: null,
-      zone: { points: [{ lat: 55, lng: 37 }] },
-      description: "desc",
-    },
-  ]);
+    render(renderWithProviders(<DashboardPage />));
 
-  render(renderWithProviders(<DashboardPage />));
+    expect(await screen.findByTestId("map")).toBeInTheDocument();
+    expect(await screen.findByTestId("polygon")).toBeInTheDocument();
+    expect(await screen.findByTestId("placemark")).toBeInTheDocument();
+  });
 
-  fireEvent.click(await screen.findByTestId("placemark"));
+  // 6. Клик по задаче — открытие drawer
+  test("opens task drawer on placemark click", async () => {
+    const tasksMock = [
+      {
+        id: 10,
+        title: "Test Task",
+        status: "in_progress",
+        priority: "medium",
+        team_id: null,
+        zone: { id: 1, name: "Z", description: "", points: [{ lat: 55, lng: 37 }] },
+        description: "desc",
+      },
+    ] as unknown as Task[];
 
-  expect(await screen.findByText(/test task/i)).toBeInTheDocument();
-});
+    mockFetchTasks.mockResolvedValue(tasksMock);
 
-// ======================================================================
-//                7. Клик по зоне — открытие drawer
-// ======================================================================
-test("opens zone drawer on polygon click", async () => {
-  fetchZones.mockResolvedValue([
-    { id: 99, name: "Z1", points: [{ lat: 55, lng: 37 }] },
-  ]);
+    render(renderWithProviders(<DashboardPage />));
 
-  render(renderWithProviders(<DashboardPage />));
+    const placemark = await screen.findByTestId("placemark");
+    fireEvent.click(placemark);
 
-  fireEvent.click(await screen.findByTestId("polygon"));
+    expect(await screen.findByText(/test task/i)).toBeInTheDocument();
+  });
 
-  expect(await screen.findByText(/зона x/i)).toBeInTheDocument();
+  // 7. Клик по зоне — открытие drawer
+  test("opens zone drawer on polygon click", async () => {
+    const zonesMock = [
+      { id: 99, name: "Z1", description: "Zone Desc", points: [{ lat: 55, lng: 37 }] },
+    ] as Zone[];
+
+    mockFetchZones.mockResolvedValue(zonesMock);
+
+    render(renderWithProviders(<DashboardPage />));
+
+    const polygon = await screen.findByTestId("polygon");
+    fireEvent.click(polygon);
+
+    expect(await screen.findByText(/зона x/i)).toBeInTheDocument();
+  });
 });

@@ -1,5 +1,5 @@
-/// <reference types="vitest" />
-
+// frontend/src/pages/TasksPage.test.tsx
+import { describe, test, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import TasksPage from "./TasksPage";
 import { renderWithProviders } from "../test-utils";

@@ -87,7 +87,8 @@ const ZoneInfoPanel = ({ zoneId }: { zoneId: number }) => {
     error,
   } = useQuery<ZoneWithTasks>({
     queryKey: ["zoneDetails", zoneId],
-    queryFn: fetchZoneDetails, // ВАЖНО: даём саму функцию, а не вызываем её
+    // Используем обертку и приведение типа, чтобы избежать несоответствия типов контекста QueryKey
+    queryFn: (context) => fetchZoneDetails(context as any),
     enabled: !!zoneId,
   });
 
@@ -193,14 +194,16 @@ export default function DashboardPage() {
     null
   );
 
-  // Три независимых запроса. Здесь react-query сам передаёт контекст в fetchXXX.
+  // Исправляем вызовы useQuery, оборачивая queryFn в стрелочные функции.
+  // Это предотвращает ошибки несоответствия типов аргументов (QueryFnContext).
+
   const {
     data: tasks = [],
     isLoading: isTasksLoading,
     error: tasksError,
   } = useQuery<Task[]>({
     queryKey: ["tasks"],
-    queryFn: fetchTasks,
+    queryFn: () => fetchTasks(),
   });
 
   const {
@@ -209,7 +212,7 @@ export default function DashboardPage() {
     error: teamsError,
   } = useQuery<Team[]>({
     queryKey: ["teams"],
-    queryFn: fetchTeams,
+    queryFn: () => fetchTeams(),
   });
 
   const {
@@ -218,7 +221,7 @@ export default function DashboardPage() {
     error: zonesError,
   } = useQuery<Zone[]>({
     queryKey: ["zones"],
-    queryFn: fetchZones,
+    queryFn: () => fetchZones(),
   });
 
   const isLoading = isTasksLoading || isTeamsLoading || isZonesLoading;
