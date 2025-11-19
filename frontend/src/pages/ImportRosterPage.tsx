@@ -278,13 +278,68 @@ function createUnitKeyWithParent(
   return `${parent}::${normKey(name)}`;
 }
 
+// Вынесенная функция для обработки одной пачки (прохода) создания юнитов.
+// Это снижает когнитивную сложность основной функции.
+async function processPendingUnitsBatch(
+  pendingUnits: UnitPair[],
+  importMaps: ImportMaps,
+  addLog: (line: string) => void,
+  incrementProgress: () => void
+): Promise<boolean> {
+  const { unitsById, unitNameToId } = importMaps;
+  let progressed = false;
+
+  for (let index = pendingUnits.length - 1; index >= 0; index--) {
+    const pending = pendingUnits[index];
+    const nameKey = normKey(pending.name);
+
+    if (unitNameToId.has(nameKey)) {
+      pendingUnits.splice(index, 1);
+      continue;
+    }
+
+    // Оптимизация: сразу пытаемся найти ID родителя
+    const parentIdFound = pending.parent
+      ? unitNameToId.get(normKey(pending.parent))
+      : null;
+
+    // Если родитель задан, но его ID нет в карте, значит родитель еще не создан -> пропускаем
+    if (pending.parent && parentIdFound === undefined) {
+      continue;
+    }
+
+    const parentId = parentIdFound ?? null;
+
+    const created = await createOrganizationUnit({
+      name: pending.name,
+      parent_id: parentId,
+      description: null,
+    } as any);
+
+    unitNameToId.set(nameKey, created.id);
+    unitsById.set(created.id, created);
+
+    incrementProgress();
+    addLog(
+      `Создано подразделение "${pending.name}" (родитель: ${
+        pending.parent ?? "—"
+      })`
+    );
+
+    pendingUnits.splice(index, 1);
+    progressed = true;
+  }
+
+  return progressed;
+}
+
 async function createMissingUnitsWithParents(
   unitPairs: UnitPair[],
   importMaps: ImportMaps,
   addLog: (line: string) => void,
   incrementProgress: () => void
 ): Promise<void> {
-  const { unitsById, unitNameToId } = importMaps;
+  const { unitNameToId } = importMaps;
 
   const pendingUnits = unitPairs.filter(
     (pair) => !unitNameToId.has(normKey(pair.name))
@@ -294,48 +349,14 @@ async function createMissingUnitsWithParents(
 
   while (pendingUnits.length && safety < 1000) {
     safety += 1;
-    let progressed = false;
 
-    for (let index = pendingUnits.length - 1; index >= 0; index--) {
-      const pending = pendingUnits[index];
-      const nameKey = normKey(pending.name);
-
-      if (unitNameToId.has(nameKey)) {
-        pendingUnits.splice(index, 1);
-        continue;
-      }
-
-      // Оптимизация: сразу пытаемся найти ID родителя
-      const parentIdFound = pending.parent
-        ? unitNameToId.get(normKey(pending.parent))
-        : null;
-
-      // Если родитель задан, но его ID нет в карте, значит родитель еще не создан -> пропускаем
-      if (pending.parent && parentIdFound === undefined) {
-        continue;
-      }
-
-      const parentId = parentIdFound ?? null;
-
-      const created = await createOrganizationUnit({
-        name: pending.name,
-        parent_id: parentId,
-        description: null,
-      } as any);
-
-      unitNameToId.set(nameKey, created.id);
-      unitsById.set(created.id, created);
-
-      incrementProgress();
-      addLog(
-        `Создано подразделение "${pending.name}" (родитель: ${
-          pending.parent ?? "—"
-        })`
-      );
-
-      pendingUnits.splice(index, 1);
-      progressed = true;
-    }
+    // Логика обработки вынесена в processPendingUnitsBatch
+    const progressed = await processPendingUnitsBatch(
+      pendingUnits,
+      importMaps,
+      addLog,
+      incrementProgress
+    );
 
     if (!progressed) {
       break;
@@ -462,7 +483,6 @@ function buildExistingSetsForDryRun(
 
   const existingUnitKeys = new Set<string>();
   for (const unit of units) {
-    // Исправлено условие с отрицанием (unit.parent_id != null)
     const parentName =
       unit.parent_id == null
         ? null
@@ -535,7 +555,6 @@ export default function ImportRosterPage() {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      // Удален лишний cast `as any[][]`, так как sheet_to_json<any[]> уже возвращает массив
       const raw = XLSX.utils.sheet_to_json<any[]>(worksheet, {
         header: 1,
         raw: true,
@@ -659,12 +678,11 @@ export default function ImportRosterPage() {
         pyros
       );
 
-      // Используем helper для сбора существующих ключей (снижение Complexity)
       const {
         existingUnitKeys,
         existingTeamKeys,
         existingPyroNames,
-        unitKey
+        unitKey,
       } = buildExistingSetsForDryRun(units, teams, pyros, unitsById);
 
       const unitsToCreateSet = new Map<
