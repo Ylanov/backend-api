@@ -33,9 +33,9 @@ type Props = {
   existingTeams?: Team[];
 };
 
-function normalizeLight(s: string): string {
+function normalizeLight(source: string): string {
   // «лёгкая» нормализация: trim + схлопывание пробелов
-  return s.trim().replaceAll(/\s+/g, " ");
+  return source.trim().replaceAll(/\s+/g, " ");
 }
 
 type CreateResult = {
@@ -80,12 +80,17 @@ export default function CreateTeamDialog({
       setError(null);
       try {
         const data = await fetchTeams();
-        if (!ignore) setTeams(data);
-      } catch (e: any) {
-        if (!ignore)
-          setError(e?.message || "Не удалось загрузить список групп");
+        if (!ignore) {
+          setTeams(data);
+        }
+      } catch (error_: any) {
+        if (!ignore) {
+          setError(error_?.message || "Не удалось загрузить список групп");
+        }
       } finally {
-        if (!ignore) setFetching(false);
+        if (!ignore) {
+          setFetching(false);
+        }
       }
     }
 
@@ -93,8 +98,8 @@ export default function CreateTeamDialog({
       setName("");
       setError(null);
       triedAutosuffixRef.current = false;
-      const start = parentUnitId ?? initialUnitId ?? null;
-      setUnitId(start ?? "");
+      const startUnitId = parentUnitId ?? initialUnitId ?? null;
+      setUnitId(startUnitId ?? "");
       load();
     }
 
@@ -106,18 +111,24 @@ export default function CreateTeamDialog({
 
   const normalizedExistingByUnit = useMemo(() => {
     const map = new Map<number | "no-unit", Set<string>>();
-    for (const t of teams) {
-      const key = (t.organization_unit_id ?? "no-unit") as number | "no-unit";
-      const set = map.get(key) ?? new Set<string>();
-      set.add(normalizeLight(t.name));
-      map.set(key, set);
+    for (const team of teams) {
+      const unitKey = (team.organization_unit_id ?? "no-unit") as
+        | number
+        | "no-unit";
+      const set =
+        map.get(unitKey) ??
+        new Set<string>();
+      set.add(normalizeLight(team.name));
+      map.set(unitKey, set);
     }
     return map;
   }, [teams]);
 
   const resolveUnitId = (): number | null => {
     if (Array.isArray(allUnits) && allUnits.length > 0) {
-      if (unitId === "") return null;
+      if (unitId === "") {
+        return null;
+      }
       return Number(unitId);
     }
     return parentUnitId ?? null;
@@ -137,13 +148,13 @@ export default function CreateTeamDialog({
       setError(null);
       const team = await createTeam(payload);
       return { team, isNameConflict: false };
-    } catch (e: any) {
-      console.error(e);
-      const status = e?.status ?? e?.response?.status;
+    } catch (error_: any) {
+      console.error(error_);
+      const status = error_?.status ?? error_?.response?.status;
       const detail =
-        e?.responseData?.detail ??
-        e?.response?.data?.detail ??
-        e?.message ??
+        error_?.responseData?.detail ??
+        error_?.response?.data?.detail ??
+        error_?.message ??
         "";
 
       const message = detail || "Не удалось создать группу";
@@ -151,27 +162,114 @@ export default function CreateTeamDialog({
       setError(errorMessage);
 
       const isNameConflict =
-        status === 409 || /существует|exists|is taken/i.test(String(detail));
+        status === 409 ||
+        /существует|exists|is taken/i.test(String(detail));
 
       return { team: null, isNameConflict, message };
     }
   }
 
+  const getExistingNamesSetForUnit = (
+    finalUnitId: number | null
+  ): Set<string> => {
+    const unitKey = (finalUnitId ?? "no-unit") as number | "no-unit";
+    return normalizedExistingByUnit.get(unitKey) ?? new Set<string>();
+  };
+
+  const isBaseNameValid = (
+    baseName: string,
+    existingSet: Set<string>
+  ): boolean => {
+    if (!baseName) {
+      setError("Введите название группы.");
+      return false;
+    }
+    if (existingSet.has(baseName)) {
+      setError(
+        "Группа с таким названием уже существует в этом подразделении."
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const runOnCreatedCallbackSafely = async () => {
+    if (typeof onCreated === "function") {
+      try {
+        await onCreated();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const notifyCreationAndClose = async (
+    createdTeam: Team,
+    baseName: string,
+    wasAutosuffixed: boolean
+  ) => {
+    await runOnCreatedCallbackSafely();
+    if (wasAutosuffixed) {
+      notifySuccess(
+        `Группа «${baseName}» уже существует. Создана «${createdTeam.name}».`
+      );
+    } else {
+      notifySuccess(`Группа «${createdTeam.name}» успешно создана`);
+    }
+    closeSafely();
+  };
+
+  const handleFinalErrorNotification = (message?: string) => {
+    if (message) {
+      notifyError(message);
+    } else {
+      notifyError("Не удалось создать группу");
+    }
+  };
+
+  const attemptDirectCreation = async (
+    baseName: string,
+    finalUnitId: number | null
+  ): Promise<CreateResult> => {
+    const payload: TeamCreate = {
+      name: baseName,
+      organization_unit_id: finalUnitId,
+    };
+    return tryCreate(payload);
+  };
+
+  const attemptAutosuffixCreation = async (
+    baseName: string,
+    finalUnitId: number | null,
+    existingSet: Set<string>
+  ): Promise<Team | null> => {
+    triedAutosuffixRef.current = true;
+
+    for (let suffixNumber = 2; suffixNumber <= 10; suffixNumber++) {
+      const candidateName = `${baseName} (${suffixNumber})`;
+      if (existingSet.has(candidateName)) {
+        continue;
+      }
+
+      const { team: suffixedTeam } = await tryCreate({
+        name: candidateName,
+        organization_unit_id: finalUnitId,
+      });
+
+      if (suffixedTeam) {
+        return suffixedTeam;
+      }
+    }
+
+    return null;
+  };
+
   async function handleSubmit() {
     const finalUnitId = resolveUnitId();
     const baseName = normalizeLight(name);
+    const existingSet = getExistingNamesSetForUnit(finalUnitId);
 
-    if (!baseName) {
-      setError("Введите название группы.");
-      return;
-    }
-
-    const unitKey = (finalUnitId ?? "no-unit") as number | "no-unit";
-    const existingSet =
-      normalizedExistingByUnit.get(unitKey) ?? new Set<string>();
-
-    if (existingSet.has(baseName)) {
-      setError("Группа с таким названием уже существует в этом подразделении.");
+    if (!isBaseNameValid(baseName, existingSet)) {
       return;
     }
 
@@ -179,61 +277,31 @@ export default function CreateTeamDialog({
     setError(null);
 
     try {
-      // 1) Прямая попытка
-      const payload: TeamCreate = {
-        name: baseName,
-        organization_unit_id: finalUnitId,
-      };
-      const { team, isNameConflict, message } = await tryCreate(payload);
+      const {
+        team,
+        isNameConflict,
+        message,
+      } = await attemptDirectCreation(baseName, finalUnitId);
 
       if (team) {
-        if (typeof onCreated === "function") {
-          try {
-            await onCreated();
-          } catch {
-            /* ignore */
-          }
-        }
-        notifySuccess(`Группа «${team.name}» успешно создана`);
-        closeSafely();
+        await notifyCreationAndClose(team, baseName, false);
         return;
       }
 
-      // 2) Конфликт названия — пробуем авто-суффикс, если ещё не пробовали
       if (isNameConflict && !triedAutosuffixRef.current) {
-        triedAutosuffixRef.current = true;
+        const suffixedTeam = await attemptAutosuffixCreation(
+          baseName,
+          finalUnitId,
+          existingSet
+        );
 
-        for (let i = 2; i <= 10; i++) {
-          const candidate = `${baseName} (${i})`;
-          if (!existingSet.has(candidate)) {
-            const { team: suffixedTeam } = await tryCreate({
-              name: candidate,
-              organization_unit_id: finalUnitId,
-            });
-            if (suffixedTeam) {
-              if (typeof onCreated === "function") {
-                try {
-                  await onCreated();
-                } catch {
-                  /* ignore */
-                }
-              }
-              notifySuccess(
-                `Группа «${baseName}» уже существует. Создана «${suffixedTeam.name}».`
-              );
-              closeSafely();
-              return;
-            }
-          }
+        if (suffixedTeam) {
+          await notifyCreationAndClose(suffixedTeam, baseName, true);
+          return;
         }
       }
 
-      // 3) Если сюда дошли — значит, так и не смогли создать
-      if (message) {
-        notifyError(message);
-      } else {
-        notifyError("Не удалось создать группу");
-      }
+      handleFinalErrorNotification(message);
     } finally {
       setLoading(false);
     }
@@ -249,8 +317,8 @@ export default function CreateTeamDialog({
           <TextField
             label="Название группы *"
             value={name}
-            onChange={(e) => {
-              setName(e.target.value);
+            onChange={(event) => {
+              setName(event.target.value);
               setError(null);
             }}
             disabled={loading || fetching}
@@ -266,17 +334,17 @@ export default function CreateTeamDialog({
                 labelId="unit-select-label"
                 label="Подразделение"
                 value={unitId}
-                onChange={(e) => {
-                  setUnitId(e.target.value as number | "");
+                onChange={(event) => {
+                  setUnitId(event.target.value as number | "");
                   setError(null);
                 }}
               >
                 <MenuItem value="">
                   <em>Без подразделения</em>
                 </MenuItem>
-                {allUnits!.map((u) => (
-                  <MenuItem key={u.id} value={u.id}>
-                    {u.name}
+                {allUnits!.map((unit) => (
+                  <MenuItem key={unit.id} value={unit.id}>
+                    {unit.name}
                   </MenuItem>
                 ))}
               </Select>

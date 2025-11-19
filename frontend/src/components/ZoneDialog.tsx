@@ -41,27 +41,27 @@ function isValidCoordinate(value: unknown): value is number {
 }
 
 // Перевод градусов в радианы
-function toRad(deg: number): number {
-  return (deg * Math.PI) / 180;
+function toRad(degrees: number): number {
+  return (degrees * Math.PI) / 180;
 }
 
 // Расчёт расстояния между двумя точками (метры) по формуле гаверсинуса
-function haversineDistance(a: ZonePoint, b: ZonePoint): number {
-  const R = 6378137; // радиус Земли, м
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
+function haversineDistance(pointA: ZonePoint, pointB: ZonePoint): number {
+  const earthRadiusMeters = 6378137;
+  const deltaLat = toRad(pointB.lat - pointA.lat);
+  const deltaLng = toRad(pointB.lng - pointA.lng);
+  const lat1 = toRad(pointA.lat);
+  const lat2 = toRad(pointB.lat);
 
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLng = Math.sin(dLng / 2);
+  const sinDeltaLat = Math.sin(deltaLat / 2);
+  const sinDeltaLng = Math.sin(deltaLng / 2);
 
   const h =
-    sinDLat * sinDLat +
-    Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+    sinDeltaLat * sinDeltaLat +
+    Math.cos(lat1) * Math.cos(lat2) * sinDeltaLng * sinDeltaLng;
 
-  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-  return R * c;
+  const centralAngle = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return earthRadiusMeters * centralAngle;
 }
 
 // Расчёт площади и периметра полигона (м² и м) с проекцией в Web Mercator
@@ -73,34 +73,34 @@ function calculatePolygonMetrics(points: ZonePoint[]): {
     return { areaSqMeters: 0, perimeterMeters: 0 };
   }
 
-  const R = 6378137;
+  const earthRadiusMeters = 6378137;
 
   // Перевод в Web Mercator (x, y) в метрах
-  const projected = points.map((p) => {
-    const latRad = toRad(p.lat);
-    const lngRad = toRad(p.lng);
-    const x = R * lngRad;
-    const y = R * Math.log(Math.tan(Math.PI / 4 + latRad / 2));
+  const projected = points.map((point) => {
+    const latRad = toRad(point.lat);
+    const lngRad = toRad(point.lng);
+    const x = earthRadiusMeters * lngRad;
+    const y = earthRadiusMeters * Math.log(Math.tan(Math.PI / 4 + latRad / 2));
     return { x, y };
   });
 
   // Периметр (замкнутый)
   let perimeterMeters = 0;
-  for (let i = 0; i < points.length; i++) {
-    const current = points[i];
-    const next = points[(i + 1) % points.length];
+  for (let index = 0; index < points.length; index++) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
     perimeterMeters += haversineDistance(current, next);
   }
 
   // Площадь по формуле Гаусса (shoelace) в проекции
-  let area = 0;
-  for (let i = 0; i < projected.length; i++) {
-    const { x: x1, y: y1 } = projected[i];
+  let areaSum = 0;
+  for (let index = 0; index < projected.length; index++) {
+    const { x: x1, y: y1 } = projected[index];
     const { x: x2, y: y2 } =
-      projected[(i + 1) % projected.length];
-    area += x1 * y2 - x2 * y1;
+      projected[(index + 1) % projected.length];
+    areaSum += x1 * y2 - x2 * y1;
   }
-  const areaSqMeters = Math.abs(area) / 2;
+  const areaSqMeters = Math.abs(areaSum) / 2;
 
   return { areaSqMeters, perimeterMeters };
 }
@@ -124,6 +124,21 @@ function formatPerimeter(perimeterMeters: number): string {
     return `${perimeterMeters.toFixed(0)} м`;
   }
   return `${(perimeterMeters / 1000).toFixed(2)} км`;
+}
+
+// Вспомогательные функции для обновления точек (вне компонента — меньше вложенность)
+function replacePointAtIndex(
+  points: ZonePoint[],
+  index: number,
+  newPoint: ZonePoint
+): ZonePoint[] {
+  return points.map((point, currentIndex) =>
+    currentIndex === index ? newPoint : point
+  );
+}
+
+function removePointAtIndex(points: ZonePoint[], index: number): ZonePoint[] {
+  return points.filter((_, currentIndex) => currentIndex !== index);
 }
 
 export default function ZoneDialog({
@@ -152,9 +167,9 @@ export default function ZoneDialog({
       setDescription(zone.description ?? "");
       setPoints(
         Array.isArray(zone.points)
-          ? zone.points.map((p) => ({
-              lat: p.lat,
-              lng: p.lng,
+          ? zone.points.map((point) => ({
+              lat: point.lat,
+              lng: point.lng,
             }))
           : []
       );
@@ -170,7 +185,8 @@ export default function ZoneDialog({
 
   const mapCenter = useMemo<[number, number]>(() => {
     const firstValidPoint = points.find(
-      (p) => isValidCoordinate(p.lat) && isValidCoordinate(p.lng)
+      (point) =>
+        isValidCoordinate(point.lat) && isValidCoordinate(point.lng)
     );
     if (firstValidPoint) {
       return [firstValidPoint.lat, firstValidPoint.lng];
@@ -182,10 +198,13 @@ export default function ZoneDialog({
   const hasPolygon = points.length >= 3;
 
   const { areaSqMeters, perimeterMeters } = useMemo(
-    () => (hasPolygon ? calculatePolygonMetrics(points) : {
-      areaSqMeters: 0,
-      perimeterMeters: 0,
-    }),
+    () =>
+      hasPolygon
+        ? calculatePolygonMetrics(points)
+        : {
+            areaSqMeters: 0,
+            perimeterMeters: 0,
+          },
     [points, hasPolygon]
   );
 
@@ -197,13 +216,16 @@ export default function ZoneDialog({
     const [lat, lng] = coords;
     if (!isValidCoordinate(lat) || !isValidCoordinate(lng)) return;
 
-    setPoints((prev) => [...prev, { lat, lng }]);
+    setPoints((previousPoints) => [
+      ...previousPoints,
+      { lat, lng },
+    ]);
   };
 
   const handleMapRightClick = (event: any) => {
     // ПКМ по карте — удалить последнюю точку
     event?.preventDefault?.();
-    setPoints((prev) => prev.slice(0, -1));
+    setPoints((previousPoints) => previousPoints.slice(0, -1));
     setIsPolygonClosed(false);
   };
 
@@ -215,14 +237,14 @@ export default function ZoneDialog({
     const [lat, lng] = coords;
     if (!isValidCoordinate(lat) || !isValidCoordinate(lng)) return;
 
-    const first = points[0];
+    const firstPoint = points[0];
     const threshold = 0.0007; // ~50–70 м, чтобы «попасть» рядом с первой точкой
 
-    const nearFirst =
-      Math.abs(lat - first.lat) < threshold &&
-      Math.abs(lng - first.lng) < threshold;
+    const nearFirstPoint =
+      Math.abs(lat - firstPoint.lat) < threshold &&
+      Math.abs(lng - firstPoint.lng) < threshold;
 
-    if (nearFirst) {
+    if (nearFirstPoint) {
       setIsPolygonClosed(true);
     }
   };
@@ -233,7 +255,33 @@ export default function ZoneDialog({
   };
 
   const handleRemoveLastPoint = () => {
-    setPoints((prev) => prev.slice(0, -1));
+    setPoints((previousPoints) => previousPoints.slice(0, -1));
+    setIsPolygonClosed(false);
+  };
+
+  const handlePlacemarkDragEnd = (index: number, event: any) => {
+    const target = event.get("target");
+    const coords = target?.geometry?.getCoordinates?.();
+    if (!Array.isArray(coords) || coords.length < 2) {
+      return;
+    }
+
+    const [lat, lng] = coords;
+    if (!isValidCoordinate(lat) || !isValidCoordinate(lng)) {
+      return;
+    }
+
+    setPoints((previousPoints) =>
+      replacePointAtIndex(previousPoints, index, { lat, lng })
+    );
+  };
+
+  const handlePlacemarkContextMenu = (index: number, event: any) => {
+    // ПКМ по точке — удалить её
+    event?.preventDefault?.();
+    setPoints((previousPoints) =>
+      removePointAtIndex(previousPoints, index)
+    );
     setIsPolygonClosed(false);
   };
 
@@ -254,7 +302,10 @@ export default function ZoneDialog({
     const payload = {
       name: name.trim(),
       description: description.trim() || null,
-      points: points.map((p) => ({ lat: p.lat, lng: p.lng })),
+      points: points.map((point) => ({
+        lat: point.lat,
+        lng: point.lng,
+      })),
     };
 
     try {
@@ -267,10 +318,10 @@ export default function ZoneDialog({
       }
       setLoading(false);
       onSave();
-    } catch (e: any) {
+    } catch (error_: any) {
       const message =
-        e?.response?.data?.detail ||
-        e?.message ||
+        error_?.response?.data?.detail ||
+        error_?.message ||
         "Не удалось сохранить зону.";
       setError(message);
       notifyError(message);
@@ -326,7 +377,7 @@ export default function ZoneDialog({
                 <TextField
                   label="Название зоны"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(event) => setName(event.target.value)}
                   fullWidth
                   required
                 />
@@ -334,7 +385,7 @@ export default function ZoneDialog({
                 <TextField
                   label="Описание"
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(event) => setDescription(event.target.value)}
                   fullWidth
                   multiline
                   minRows={3}
@@ -443,7 +494,8 @@ export default function ZoneDialog({
                         <Polygon
                           geometry={[
                             points.map(
-                              (p) => [p.lat, p.lng] as [number, number]
+                              (point) =>
+                                [point.lat, point.lng] as [number, number]
                             ),
                           ]}
                           options={{
@@ -454,10 +506,10 @@ export default function ZoneDialog({
                         />
                       )}
 
-                      {points.map((p, index) => (
+                      {points.map((point, index) => (
                         <Placemark
-                          key={`${p.lat}-${p.lng}-${index}`}
-                          geometry={[p.lat, p.lng]}
+                          key={`${point.lat}-${point.lng}-${index}`}
+                          geometry={[point.lat, point.lng]}
                           properties={{
                             iconCaption: `${index + 1}`,
                           }}
@@ -465,33 +517,14 @@ export default function ZoneDialog({
                             preset: "islands#blueCircleDotIconWithCaption",
                             draggable: true,
                           }}
-                          onDragEnd={(e: any) => {
-                            const target = e.get("target");
-                            const coords =
-                              target?.geometry?.getCoordinates?.();
-                            if (!Array.isArray(coords) || coords.length < 2)
-                              return;
-                            const [lat, lng] = coords;
-                            if (
-                              !isValidCoordinate(lat) ||
-                              !isValidCoordinate(lng)
-                            )
-                              return;
-
-                            setPoints((prev) =>
-                              prev.map((pt, i) =>
-                                i === index ? { lat, lng } : pt
-                              )
-                            );
-                          }}
-                          onContextMenu={(e: any) => {
-                            // ПКМ по точке — удалить её
-                            e?.preventDefault?.();
-                            setPoints((prev) =>
-                              prev.filter((_, i) => i !== index)
-                            );
-                            setIsPolygonClosed(false);
-                          }}
+                          onDragEnd={handlePlacemarkDragEnd.bind(
+                            null,
+                            index
+                          )}
+                          onContextMenu={handlePlacemarkContextMenu.bind(
+                            null,
+                            index
+                          )}
                         />
                       ))}
                     </Map>

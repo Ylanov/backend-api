@@ -29,15 +29,18 @@ export default defineConfig({
     globals: true,
     setupFiles: "./src/setupTests.ts",
 
+    // чтобы Vitest видел тесты
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+
+    // только pool, без min/maxWorkers — так TS не будет ругаться
+    pool: "threads",
+
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
       reportsDirectory: "coverage",
       include: ["src/**/*.{ts,tsx}"],
-      exclude: [
-        "src/**/*.test.{ts,tsx}",
-        "src/**/*.spec.{ts,tsx}",
-      ],
+      exclude: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}"],
     },
   },
 });

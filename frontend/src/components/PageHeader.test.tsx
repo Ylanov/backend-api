@@ -1,6 +1,8 @@
+import { test, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+
 import PageHeader from "./PageHeader";
-import { renderWithProviders } from "@/test-utils";
+import { renderWithProviders } from "../test-utils";
 
 test("renders title", () => {
   render(renderWithProviders(<PageHeader title="Тест" />));
@@ -10,8 +12,8 @@ test("renders title", () => {
 test("renders actions if provided", () => {
   render(
     renderWithProviders(
-      <PageHeader title="Title" actions={<button>Action</button>} />
-    )
+      <PageHeader title="Title" actions={<button>Action</button>} />,
+    ),
   );
   expect(screen.getByText(/action/i)).toBeInTheDocument();
 });
