@@ -1,6 +1,13 @@
-// src/pages/TasksPageHeader.tsx
+// frontend/src/pages/TasksPageHeader.tsx
 import { useTheme } from "@mui/material/styles";
-import { Box, Stack, TextField, MenuItem, Button, useMediaQuery } from "@mui/material";
+import {
+  Box,
+  Stack,
+  TextField,
+  MenuItem,
+  Button,
+  useMediaQuery,
+} from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import PageHeader from "../components/PageHeader";
 
@@ -10,15 +17,17 @@ export type TasksFilters = {
   priority?: string | null;
 };
 
+type TasksPageHeaderProps = Readonly<{
+  filters: TasksFilters;
+  onFiltersChange: (patch: Partial<TasksFilters>) => void;
+  onCreate: () => void;
+}>;
+
 export default function TasksPageHeader({
   filters,
   onFiltersChange,
   onCreate,
-}: {
-  filters: TasksFilters;
-  onFiltersChange: (patch: Partial<TasksFilters>) => void;
-  onCreate: () => void;
-}) {
+}: TasksPageHeaderProps) {
   const theme = useTheme();
   const smUp = useMediaQuery(theme.breakpoints.up("sm"));
 
@@ -44,7 +53,7 @@ export default function TasksPageHeader({
             size="small"
             placeholder="Поиск…"
             value={filters.q || ""}
-            onChange={(e) => onFiltersChange({ q: e.target.value })}
+            onChange={(event) => onFiltersChange({ q: event.target.value })}
             inputProps={{ "aria-label": "Поиск задач" }}
             sx={{ minWidth: { xs: "100%", sm: 180 } }}
           />
@@ -54,7 +63,9 @@ export default function TasksPageHeader({
             select
             label="Статус"
             value={filters.status ?? ""}
-            onChange={(e) => onFiltersChange({ status: e.target.value || null })}
+            onChange={(event) =>
+              onFiltersChange({ status: event.target.value || null })
+            }
             sx={{ minWidth: { xs: "100%", sm: 160 } }}
           >
             <MenuItem value="">Все</MenuItem>
@@ -69,8 +80,8 @@ export default function TasksPageHeader({
             select
             label="Приоритет"
             value={filters.priority ?? ""}
-            onChange={(e) =>
-              onFiltersChange({ priority: e.target.value || null })
+            onChange={(event) =>
+              onFiltersChange({ priority: event.target.value || null })
             }
             sx={{ minWidth: { xs: "100%", sm: 160 } }}
           >

@@ -1,4 +1,4 @@
-// frontend/src/components/PyrotechnicianDialog.tsx
+// frontend/src/pages/PyrotechniciansPage.tsx
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -33,6 +33,11 @@ type Props = {
   onSave: () => void;
   pyro: Pyrotechnician | null;
 };
+
+// Безопасная и простая проверка e-mail без вложенных квантификаторов
+// и с ограничением максимальной длины — чтобы исключить риск ReDoS.
+const MAX_EMAIL_LENGTH = 254;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function PyrotechnicianDialog({
   open,
@@ -88,16 +93,26 @@ export default function PyrotechnicianDialog({
       setError("ФИО обязательно.");
       return false;
     }
-    if (!email.trim()) {
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
       setError("E-mail обязателен.");
       return false;
     }
-    // Простая проверка формата почты
-    const emailRe = /\S+@\S+\.\S+/;
-    if (!emailRe.test(email.trim())) {
+
+    // Ограничиваем длину и используем простой безопасный паттерн —
+    // без вложенных квантификаторов, чтобы избежать потенциального ReDoS.
+    if (trimmedEmail.length > MAX_EMAIL_LENGTH) {
+      setError("E-mail слишком длинный.");
+      return false;
+    }
+
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
       setError("Укажите корректный e-mail.");
       return false;
     }
+
     return true;
   };
 
@@ -128,10 +143,10 @@ export default function PyrotechnicianDialog({
       }
       setLoading(false);
       onSave();
-    } catch (e: any) {
+    } catch (errorAny: any) {
       const msg =
-        e?.response?.data?.detail ||
-        e?.message ||
+        errorAny?.response?.data?.detail ||
+        errorAny?.message ||
         "Не удалось сохранить пиротехника.";
       setError(msg);
       notifyError(msg);
@@ -181,7 +196,7 @@ export default function PyrotechnicianDialog({
                 <TextField
                   label="ФИО"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(event) => setFullName(event.target.value)}
                   fullWidth
                   required
                 />
@@ -189,7 +204,7 @@ export default function PyrotechnicianDialog({
                 <TextField
                   label="E-mail"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                   fullWidth
                   required
                   type="email"
@@ -198,21 +213,21 @@ export default function PyrotechnicianDialog({
                 <TextField
                   label="Телефон"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(event) => setPhone(event.target.value)}
                   fullWidth
                 />
 
                 <TextField
                   label="Роль"
                   value={role}
-                  onChange={(e) => setRole(e.target.value)}
+                  onChange={(event) => setRole(event.target.value)}
                   fullWidth
                 />
 
                 <TextField
                   label="Звание"
                   value={rank}
-                  onChange={(e) => setRank(e.target.value)}
+                  onChange={(event) => setRank(event.target.value)}
                   fullWidth
                 />
 
@@ -225,7 +240,9 @@ export default function PyrotechnicianDialog({
                       control={
                         <Switch
                           checked={isActive}
-                          onChange={(e) => setIsActive(e.target.checked)}
+                          onChange={(event) =>
+                            setIsActive(event.target.checked)
+                          }
                         />
                       }
                       label="Активен"
@@ -234,7 +251,9 @@ export default function PyrotechnicianDialog({
                       control={
                         <Switch
                           checked={isAdmin}
-                          onChange={(e) => setIsAdmin(e.target.checked)}
+                          onChange={(event) =>
+                            setIsAdmin(event.target.checked)
+                          }
                         />
                       }
                       label="Администратор"
