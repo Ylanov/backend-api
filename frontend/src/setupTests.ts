@@ -1,10 +1,15 @@
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, vi } from "vitest";
+import { beforeEach } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
-// Глобальный QueryClient для всех тестов
+// Декларация глобального клиента
+declare global {
+  // eslint-disable-next-line no-var
+  var __TEST_QUERY_CLIENT__: QueryClient;
+}
+
 beforeEach(() => {
-  global.__TEST_QUERY_CLIENT__ = new QueryClient({
+  globalThis.__TEST_QUERY_CLIENT__ = new QueryClient({
     defaultOptions: {
       queries: {
         retry: false,
@@ -13,8 +18,3 @@ beforeEach(() => {
     },
   });
 });
-
-// Моки CSS, SCSS
-vi.mock("*.css", () => ({}));
-vi.mock("*.scss", () => ({}));
-vi.mock("./styles.css", () => ({}));

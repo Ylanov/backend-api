@@ -391,7 +391,7 @@ export default function StaffAndStructurePage() {
     };
 
     const handleDeleteTeam = async (team: Team) => {
-      if (!window.confirm(`Удалить команду «${team.name}»?`)) return;
+      if (!globalThis.confirm(`Удалить команду «${team.name}»?`)) return;
       try {
         await deleteTeam(team.id);
         notifySuccess(`Команда «${team.name}» удалена.`);
@@ -402,7 +402,7 @@ export default function StaffAndStructurePage() {
     };
 
     const handleDeletePyro = async (pyro: Pyrotechnician) => {
-      if (!window.confirm(`Удалить сотрудника «${pyro.full_name}»?`)) return;
+      if (!globalThis.confirm(`Удалить сотрудника «${pyro.full_name}»?`)) return;
       try {
         await deletePyrotechnician(pyro.id);
         notifySuccess("Сотрудник удалён.");
@@ -418,7 +418,7 @@ export default function StaffAndStructurePage() {
         .map((id) => Number(id.replace("pyro-", "")));
 
       if (!pyroIds.length) return;
-      if (!window.confirm(`Удалить ${pyroIds.length} выбранных сотрудник(ов)? Действие необратимо.`)) return;
+      if (!globalThis.confirm(`Удалить ${pyroIds.length} выбранных сотрудник(ов)? Действие необратимо.`)) return;
 
       try {
         await deletePyrotechniciansBulk(pyroIds);

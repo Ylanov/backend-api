@@ -99,7 +99,7 @@ export default function OrganizationPage() {
 
   const handleDeleteUnit = async (node: OrganizationNode) => {
     if (
-      !window.confirm(
+      !globalThis.confirm(
         `Вы уверены, что хотите удалить подразделение "${node.name}"? Это действие необратимо.`
       )
     ) {
