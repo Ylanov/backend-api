@@ -146,10 +146,10 @@ export default function PyrotechnicianDialog({
       }
       setLoading(false);
       onSave();
-    } catch (errorAny: any) {
+    } catch (error_: any) {
       const msg =
-        errorAny?.response?.data?.detail ||
-        errorAny?.message ||
+        error_?.response?.data?.detail ||
+        error_?.message ||
         "Не удалось сохранить пиротехника.";
       setError(msg);
       notifyError(msg);

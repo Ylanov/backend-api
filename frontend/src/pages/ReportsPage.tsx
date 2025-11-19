@@ -358,11 +358,11 @@ export default function ReportsPage() {
   };
 
   const combinedFiltersError =
-    (isTeamsError && (teamsError as any)?.message) ||
-    (isZonesError && (zonesError as any)?.message);
+    (isTeamsError && teamsError?.message) ||
+    (isZonesError && zonesError?.message);
 
   const reportErrorText = isReportError
-    ? (reportError as any)?.message || "Не удалось загрузить отчет."
+    ? reportError?.message || "Не удалось загрузить отчет."
     : null;
 
   const columns: DataTableColumn<Task>[] = [

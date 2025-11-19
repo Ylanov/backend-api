@@ -245,20 +245,24 @@ const SelectionToolbar = ({
   onBulkDeletePyros: () => void;
   onClearSelection: () => void;
 }) => {
-  const selectedCount = selectedIds.size;
-  if (selectedCount === 0) return null;
-
   const summary = useMemo(() => {
-    const s = { pyros: 0, teams: 0, units: 0 };
+    const result = { pyros: 0, teams: 0, units: 0 };
     selectedIds.forEach((id) => {
-      if (id.startsWith("pyro-")) s.pyros++;
-      else if (id.startsWith("team-")) s.teams++;
-      else if (id.startsWith("unit-")) s.units++;
+      if (id.startsWith("pyro-")) result.pyros++;
+      else if (id.startsWith("team-")) result.teams++;
+      else if (id.startsWith("unit-")) result.units++;
     });
-    return s;
+    return result;
   }, [selectedIds]);
 
-  const canDeletePyros = summary.pyros > 0 && summary.teams === 0 && summary.units === 0;
+  const selectedCount = selectedIds.size;
+
+  if (selectedCount === 0) {
+    return null;
+  }
+
+  const canDeletePyros =
+    summary.pyros > 0 && summary.teams === 0 && summary.units === 0;
 
   return (
     <AppBar
@@ -281,16 +285,20 @@ const SelectionToolbar = ({
 
         <Tooltip title="Удалить выбранных сотрудников">
           <span>
-            <IconButton color="error" onClick={onBulkDeletePyros} disabled={!canDeletePyros}>
+            <IconButton
+              color="error"
+              onClick={onBulkDeletePyros}
+              disabled={!canDeletePyros}
+            >
               <DeleteIcon />
             </IconButton>
           </span>
         </Tooltip>
 
         <Tooltip title="Снять выделение">
-            <IconButton onClick={onClearSelection} sx={{ ml: 1 }}>
-              <ClearAllIcon />
-            </IconButton>
+          <IconButton onClick={onClearSelection} sx={{ ml: 1 }}>
+            <ClearAllIcon />
+          </IconButton>
         </Tooltip>
       </Toolbar>
     </AppBar>
