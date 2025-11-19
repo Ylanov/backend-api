@@ -1,14 +1,14 @@
 // frontend/src/components/PageHeader.tsx
-import { ReactNode, useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { Box, Stack, Typography, useMediaQuery, useTheme } from "@mui/material";
 
 type PageHeaderProps = {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-  breadcrumbs?: ReactNode;
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly actions?: ReactNode;
+  readonly breadcrumbs?: ReactNode;
   /** Делает шапку «липкой» под AppBar */
-  sticky?: boolean;
+  readonly sticky?: boolean;
 };
 
 export default function PageHeader({
@@ -35,7 +35,6 @@ export default function PageHeader({
               zIndex: (t) => t.zIndex.appBar - 1,
               bgcolor: "background.default",
               pt: { xs: 1, sm: 1, md: 0 },
-              // лёгкое отделение при липком режиме
               borderBottom: { xs: "1px solid", md: "none" },
               borderColor: { xs: "divider", md: "transparent" },
             }
@@ -43,6 +42,7 @@ export default function PageHeader({
       }
     >
       {breadcrumbs}
+
       <Stack
         direction={smUp ? "row" : "column"}
         alignItems={smUp ? "center" : "flex-start"}
@@ -58,6 +58,7 @@ export default function PageHeader({
           >
             {title}
           </Typography>
+
           {subtitle ? (
             <Typography variant="body2" color="text.secondary">
               {subtitle}

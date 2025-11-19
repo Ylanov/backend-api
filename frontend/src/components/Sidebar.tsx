@@ -9,7 +9,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Toolbar, // ИЗМЕНЕНИЕ: Импортирован Toolbar
+  Toolbar,
   Tooltip,
   useTheme,
 } from "@mui/material";
@@ -29,28 +29,29 @@ const MINI_WIDTH = 72;
 const STORAGE_KEY = "sidebar-collapsed";
 
 type SidebarItem = {
-  to: string;
-  label: string;
-  icon: JSX.Element;
-  adminOnly?: boolean;
+  readonly to: string;
+  readonly label: string;
+  readonly icon: JSX.Element;
+  readonly adminOnly?: boolean;
+};
+
+type SidebarProps = {
+  readonly mobileOpen: boolean;
+  readonly onMobileClose: () => void;
+  readonly isAdmin: boolean;
 };
 
 export default function Sidebar({
   mobileOpen,
   onMobileClose,
   isAdmin,
-}: {
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-  isAdmin: boolean;
-}) {
+}: SidebarProps) {
   const theme = useTheme();
   const location = useLocation();
 
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved === "1";
-    // по умолчанию — раскрыто, если key отсутствует
   });
 
   useEffect(() => {
@@ -90,7 +91,6 @@ export default function Sidebar({
         overflow: "hidden",
       }}
     >
-      {/* ИЗМЕНЕНИЕ: Добавлен Toolbar для отступа от AppBar */}
       <Toolbar />
 
       <Box sx={{ flex: 1, overflowY: "auto", py: 1 }}>
@@ -125,6 +125,7 @@ export default function Sidebar({
                 >
                   {item.icon}
                 </ListItemIcon>
+
                 {!collapsed && <ListItemText primary={item.label} />}
               </ListItemButton>
             );
@@ -145,7 +146,13 @@ export default function Sidebar({
       </Box>
 
       <Divider />
-      <Box sx={{ p: 1, display: { xs: "none", md: "flex" }, justifyContent: "center" }}>
+      <Box
+        sx={{
+          p: 1,
+          display: { xs: "none", md: "flex" },
+          justifyContent: "center",
+        }}
+      >
         <IconButton
           onClick={() => setCollapsed((v) => !v)}
           size="small"
@@ -159,7 +166,7 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Мобильный выезжающий */}
+      {/* Мобильный Drawer */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
@@ -173,7 +180,7 @@ export default function Sidebar({
         {list}
       </Drawer>
 
-      {/* Десктопный постоянный, сворачиваемый */}
+      {/* Десктопный Drawer */}
       <Drawer
         variant="permanent"
         open
@@ -187,9 +194,9 @@ export default function Sidebar({
             boxSizing: "border-box",
             overflowX: "hidden",
             borderRight: `1px solid ${theme.palette.divider}`,
-            transition: (theme as any).transitions.create("width", {
-              easing: (theme as any).transitions.easing.sharp,
-              duration: (theme as any).transitions.duration.enteringScreen,
+            transition: theme.transitions.create("width", {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
             }),
           },
         }}

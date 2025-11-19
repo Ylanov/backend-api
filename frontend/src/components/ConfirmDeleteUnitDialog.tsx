@@ -17,6 +17,17 @@ import {
 
 export type DeleteMode = "single" | "cascade";
 
+interface ConfirmDeleteUnitDialogProps {
+  readonly open: boolean;
+  readonly unitName: string;
+  readonly onClose: () => void;
+  readonly onConfirm: (mode: DeleteMode) => void;
+  /** какой режим выбран по умолчанию */
+  readonly defaultMode?: DeleteMode;
+  /** нужно ли требовать ввод контрольной фразы */
+  readonly requireTyping?: boolean;
+}
+
 export default function ConfirmDeleteUnitDialog({
   open,
   unitName,
@@ -24,16 +35,7 @@ export default function ConfirmDeleteUnitDialog({
   onConfirm,
   defaultMode = "single",
   requireTyping = true,
-}: {
-  open: boolean;
-  unitName: string;
-  onClose: () => void;
-  onConfirm: (mode: DeleteMode) => void;
-  /** какой режим выбран по умолчанию */
-  defaultMode?: DeleteMode;
-  /** нужно ли требовать ввод контрольной фразы */
-  requireTyping?: boolean;
-}) {
+}: ConfirmDeleteUnitDialogProps) {
   const [mode, setMode] = useState<DeleteMode>(defaultMode);
   const [text, setText] = useState("");
 
@@ -43,7 +45,9 @@ export default function ConfirmDeleteUnitDialog({
     [mode]
   );
 
-  const canConfirm = requireTyping ? text.trim().toLowerCase() === passphrase : true;
+  const canConfirm = requireTyping
+    ? text.trim().toLowerCase() === passphrase
+    : true;
 
   const handleClose = () => {
     setText("");
@@ -89,9 +93,9 @@ export default function ConfirmDeleteUnitDialog({
           {requireTyping && (
             <>
               <Typography variant="body2" color="text.secondary">
-                Для подтверждения введите фразу:{" "}
-                <b>{passphrase}</b>
+                Для подтверждения введите фразу: <b>{passphrase}</b>
               </Typography>
+
               <TextField
                 autoFocus
                 fullWidth
@@ -105,6 +109,7 @@ export default function ConfirmDeleteUnitDialog({
           )}
         </Stack>
       </DialogContent>
+
       <DialogActions>
         <Button onClick={handleClose}>Отмена</Button>
         <Button
