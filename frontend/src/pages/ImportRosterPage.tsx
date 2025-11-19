@@ -18,7 +18,6 @@ import {
   Paper,
   Select,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material";
 import UploadIcon from "@mui/icons-material/Upload";
@@ -74,6 +73,15 @@ type DryRunResult = {
   pyrosToCreate: NormalizedRow[];
 };
 
+type UnitPair = { parent: string | null; name: string };
+
+type ImportMaps = {
+  unitsById: Map<number, OrganizationUnit>;
+  unitNameToId: Map<string, number>;
+  teamByKey: Map<string, Team>;
+  pyroNameToId: Map<string, number>;
+};
+
 const norm = (value: any): string =>
   (value ?? "").toString().trim();
 
@@ -85,8 +93,8 @@ const stringsRow = (row: any[]): string[] =>
 
 const uniqHeaders = (headers: string[]): string[] => {
   const used = new Map<string, number>();
-  return headers.map((h, index) => {
-    const base = h || `col_${index + 1}`;
+  return headers.map((header, index) => {
+    const base = header || `col_${index + 1}`;
     const count = used.get(base) ?? 0;
     used.set(base, count + 1);
     return count === 0 ? base : `${base}_${count + 1}`;
@@ -103,6 +111,338 @@ const mappingLabels: Record<keyof Mapping, string> = {
   phone: "Телефон",
   email: "E-mail",
 };
+
+// --- Вспомогательные функции для нормализации строк ---
+
+function resolveParentUnitForRow(
+  currentParentUnit: string | null,
+  row: RawRow,
+  mapping: Mapping
+): { parentUnit: string | null; nextParentUnit: string | null } {
+  if (!mapping.parentUnit) {
+    return { parentUnit: null, nextParentUnit: currentParentUnit };
+  }
+
+  const rawParent = norm(row[mapping.parentUnit]);
+  if (rawParent) {
+    return { parentUnit: rawParent, nextParentUnit: rawParent };
+  }
+
+  return { parentUnit: currentParentUnit, nextParentUnit: currentParentUnit };
+}
+
+function resolveUnitForRow(
+  currentUnit: string | null,
+  row: RawRow,
+  mapping: Mapping
+): { unit: string; nextUnit: string | null } {
+  const rawUnit = mapping.unit ? norm(row[mapping.unit]) : "";
+  if (rawUnit) {
+    return { unit: rawUnit, nextUnit: rawUnit };
+  }
+
+  const finalUnit = currentUnit || rawUnit || "Без подразделения";
+  return { unit: finalUnit, nextUnit: currentUnit };
+}
+
+function resolveTeamForRow(
+  currentTeam: string | null,
+  row: RawRow,
+  mapping: Mapping
+): { team: string; nextTeam: string | null } {
+  if (!mapping.team) {
+    return { team: "Без группы", nextTeam: currentTeam };
+  }
+
+  const rawTeam = norm(row[mapping.team]);
+  if (rawTeam) {
+    return { team: rawTeam, nextTeam: rawTeam };
+  }
+
+  const finalTeam = currentTeam || rawTeam || "Без группы";
+  return { team: finalTeam, nextTeam: currentTeam };
+}
+
+function buildNormalizedRows(
+  sheetRows: RawRow[],
+  mapping: Mapping
+): NormalizedRow[] {
+  if (!sheetRows.length || !mapping.unit || !mapping.fullName) {
+    return [];
+  }
+
+  let currentParentUnit: string | null = null;
+  let currentUnit: string | null = null;
+  let currentTeam: string | null = null;
+
+  const result: NormalizedRow[] = [];
+
+  for (const row of sheetRows) {
+    const fullName = norm(row[mapping.fullName]);
+    if (!fullName) {
+      continue;
+    }
+
+    const parentResult = resolveParentUnitForRow(
+      currentParentUnit,
+      row,
+      mapping
+    );
+    currentParentUnit = parentResult.nextParentUnit;
+
+    const unitResult = resolveUnitForRow(currentUnit, row, mapping);
+    currentUnit = unitResult.nextUnit;
+
+    const teamResult = resolveTeamForRow(currentTeam, row, mapping);
+    currentTeam = teamResult.nextTeam;
+
+    result.push({
+      parentUnit: parentResult.parentUnit,
+      unit: unitResult.unit,
+      team: teamResult.team,
+      fullName,
+      role: mapping.role ? norm(row[mapping.role]) || null : null,
+      rank: mapping.rank ? norm(row[mapping.rank]) || null : null,
+      phone: mapping.phone ? norm(row[mapping.phone]) || null : null,
+      email: mapping.email ? norm(row[mapping.email]) || null : null,
+    });
+  }
+
+  return result;
+}
+
+// --- Вспомогательные функции для импорта ---
+
+function buildImportMaps(
+  units: OrganizationUnit[],
+  teams: Team[],
+  pyros: { id: number; full_name: string }[]
+): ImportMaps {
+  const unitsById = new Map<number, OrganizationUnit>();
+  units.forEach((unit) => unitsById.set(unit.id, unit));
+
+  const unitNameToId = new Map<string, number>();
+  units.forEach((unit) => unitNameToId.set(normKey(unit.name), unit.id));
+
+  const teamByKey = new Map<string, Team>();
+  teams.forEach((team) => {
+    const unitId = team.organization_unit_id ?? 0;
+    const key = `${unitId}::${normKey(team.name)}`;
+    teamByKey.set(key, team);
+  });
+
+  const pyroNameToId = new Map<string, number>();
+  pyros.forEach((pyro) => pyroNameToId.set(normKey(pyro.full_name), pyro.id));
+
+  return { unitsById, unitNameToId, teamByKey, pyroNameToId };
+}
+
+function collectUnitPairs(rows: NormalizedRow[]): UnitPair[] {
+  const unitPairsMap = new Map<string, UnitPair>();
+  for (const row of rows) {
+    const key = `${row.parentUnit ?? ""}::${row.unit}`;
+    if (!unitPairsMap.has(key)) {
+      unitPairsMap.set(key, { parent: row.parentUnit, name: row.unit });
+    }
+  }
+  return Array.from(unitPairsMap.values());
+}
+
+function collectUniquePyroNames(rows: NormalizedRow[]): Set<string> {
+  const uniqueNames = new Set<string>();
+  rows.forEach((row) => uniqueNames.add(normKey(row.fullName)));
+  return uniqueNames;
+}
+
+function collectTeamGroupKeys(rows: NormalizedRow[]): Set<string> {
+  const keys = new Set<string>();
+  rows.forEach((row) => keys.add(`${row.unit}::${row.team}`));
+  return keys;
+}
+
+function createUnitKeyWithParent(
+  parentName: string | null,
+  name: string
+): string {
+  const parent = parentName ? normKey(parentName) : "root";
+  return `${parent}::${normKey(name)}`;
+}
+
+async function createMissingUnitsWithParents(
+  unitPairs: UnitPair[],
+  importMaps: ImportMaps,
+  addLog: (line: string) => void,
+  incrementProgress: () => void
+): Promise<void> {
+  const { unitsById, unitNameToId } = importMaps;
+
+  const existingKeys = new Set<string>();
+  unitsById.forEach((unit) => {
+    const parentName =
+      unit.parent_id != null ? unitsById.get(unit.parent_id)?.name ?? null : null;
+    const key = createUnitKeyWithParent(parentName, unit.name);
+    existingKeys.add(key);
+  });
+
+  const pendingUnits = unitPairs.filter(
+    (pair) => !unitNameToId.has(normKey(pair.name))
+  );
+
+  let safety = 0;
+
+  while (pendingUnits.length && safety < 1000) {
+    safety += 1;
+    let progressed = false;
+
+    for (let index = pendingUnits.length - 1; index >= 0; index--) {
+      const pending = pendingUnits[index];
+
+      if (unitNameToId.has(normKey(pending.name))) {
+        pendingUnits.splice(index, 1);
+        continue;
+      }
+
+      let parentId: number | null = null;
+      if (pending.parent) {
+        const parentUnitId = unitNameToId.get(normKey(pending.parent));
+        if (parentUnitId == null) {
+          continue;
+        }
+        parentId = parentUnitId;
+      }
+
+      const created = await createOrganizationUnit({
+        name: pending.name,
+        parent_id: parentId,
+        description: null,
+      } as any);
+
+      unitNameToId.set(normKey(created.name), created.id);
+      unitsById.set(created.id, created);
+
+      incrementProgress();
+      addLog(
+        `Создано подразделение "${pending.name}" (родитель: ${
+          pending.parent ?? "—"
+        })`
+      );
+
+      pendingUnits.splice(index, 1);
+      progressed = true;
+    }
+
+    if (!progressed) {
+      break;
+    }
+  }
+}
+
+async function createMissingPyrotechniciansForRows(
+  rows: NormalizedRow[],
+  pyroNameToId: Map<string, number>,
+  addLog: (line: string) => void,
+  incrementProgress: () => void
+): Promise<void> {
+  for (const row of rows) {
+    const key = normKey(row.fullName);
+    if (pyroNameToId.has(key)) {
+      continue;
+    }
+
+    const payload: PyrotechnicianCreate = {
+      full_name: row.fullName,
+      phone: row.phone || undefined,
+      email: row.email || undefined,
+      role: row.role || undefined,
+      rank: row.rank || undefined,
+      is_admin: false,
+      is_active: true,
+    };
+
+    const created = await createPyrotechnician(payload);
+    pyroNameToId.set(key, created.id);
+
+    incrementProgress();
+    addLog(`Создан сотрудник "${row.fullName}"`);
+  }
+}
+
+type GroupedRows = {
+  unitName: string;
+  teamName: string;
+  rows: NormalizedRow[];
+};
+
+function groupRowsByUnitAndTeam(
+  rows: NormalizedRow[]
+): Map<string, GroupedRows> {
+  const groups = new Map<string, GroupedRows>();
+
+  for (const row of rows) {
+    const key = `${row.unit}::${row.team}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        unitName: row.unit,
+        teamName: row.team,
+        rows: [],
+      };
+      groups.set(key, group);
+    }
+    group.rows.push(row);
+  }
+
+  return groups;
+}
+
+async function syncTeamsForGroups(
+  rows: NormalizedRow[],
+  importMaps: ImportMaps,
+  addLog: (line: string) => void,
+  incrementProgress: () => void
+): Promise<void> {
+  const { unitNameToId, teamByKey, pyroNameToId } = importMaps;
+  const groups = groupRowsByUnitAndTeam(rows);
+
+  for (const [, group] of groups) {
+    const unitId = unitNameToId.get(normKey(group.unitName));
+    if (!unitId) {
+      addLog(
+        `⚠ Не найдено подразделение "${group.unitName}" для команды "${group.teamName}"`
+      );
+      continue;
+    }
+
+    const memberIds: number[] = [];
+    for (const row of group.rows) {
+      const pyroId = pyroNameToId.get(normKey(row.fullName));
+      if (pyroId) {
+        memberIds.push(pyroId);
+      }
+    }
+
+    const teamKey = `${unitId}::${normKey(group.teamName)}`;
+    const existingTeam = teamByKey.get(teamKey);
+
+    if (existingTeam) {
+      await patchTeam(existingTeam.id, { member_ids: memberIds });
+      addLog(
+        `Обновлена команда "${group.teamName}" в подразделении "${group.unitName}" (${memberIds.length} сотрудников)`
+      );
+    } else {
+      await createTeam({
+        name: group.teamName,
+        organization_unit_id: unitId,
+        member_ids: memberIds,
+      });
+      addLog(
+        `Создана команда "${group.teamName}" в подразделении "${group.unitName}" (${memberIds.length} сотрудников)`
+      );
+    }
+
+    incrementProgress();
+  }
+}
 
 // --- Компонент страницы импорта ---
 
@@ -135,63 +475,10 @@ export default function ImportRosterPage() {
 
   // --- Нормализация строк (fill-down логика по подразделениям и группам) ---
 
-  const normalizedRows: NormalizedRow[] = useMemo(() => {
-    if (!sheetRows.length || !mapping.unit || !mapping.fullName) return [];
-
-    let currentParentUnit: string | null = null;
-    let currentUnit: string | null = null;
-    let currentTeam: string | null = null;
-
-    const result: NormalizedRow[] = [];
-
-    for (const row of sheetRows) {
-      const fullName = norm(row[mapping.fullName!]);
-      if (!fullName) {
-        // Если нет ФИО, строку пропускаем (заголовки/пробелы)
-        continue;
-      }
-
-      // Родительское подразделение тянем вниз
-      let parentUnit: string | null = null;
-      if (mapping.parentUnit) {
-        const rawParent = norm(row[mapping.parentUnit]);
-        if (rawParent) {
-          currentParentUnit = rawParent;
-        }
-        parentUnit = currentParentUnit;
-      }
-
-      // Подразделение / отдел тянем вниз
-      const rawUnit = norm(row[mapping.unit!]);
-      if (rawUnit) {
-        currentUnit = rawUnit;
-      }
-      const unit = currentUnit || rawUnit || "Без подразделения";
-
-      // Команда / группа тянется вниз
-      let team = "Без группы";
-      if (mapping.team) {
-        const rawTeam = norm(row[mapping.team]);
-        if (rawTeam) {
-          currentTeam = rawTeam;
-        }
-        team = currentTeam || rawTeam || "Без группы";
-      }
-
-      result.push({
-        parentUnit,
-        unit,
-        team,
-        fullName,
-        role: mapping.role ? norm(row[mapping.role]) || null : null,
-        rank: mapping.rank ? norm(row[mapping.rank]) || null : null,
-        phone: mapping.phone ? norm(row[mapping.phone]) || null : null,
-        email: mapping.email ? norm(row[mapping.email]) || null : null,
-      });
-    }
-
-    return result;
-  }, [sheetRows, mapping]);
+  const normalizedRows: NormalizedRow[] = useMemo(
+    () => buildNormalizedRows(sheetRows, mapping),
+    [sheetRows, mapping]
+  );
 
   // --- Загрузка и парсинг файла ---
 
@@ -205,10 +492,10 @@ export default function ImportRosterPage() {
     setSheetRows([]);
 
     try {
-      const ab = await file.arrayBuffer();
-      const wb = XLSX.read(ab, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<any[]>(ws, {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json<any[]>(worksheet, {
         header: 1,
         raw: true,
         defval: "",
@@ -219,48 +506,49 @@ export default function ImportRosterPage() {
         return;
       }
 
-      // Ищем строку заголовков — первую строку, где хотя бы 2 непустые ячейки
-      let headerIdx = 0;
-      for (let i = 0; i < Math.min(20, raw.length); i++) {
-        const cells = stringsRow(raw[i]);
-        if (cells.filter((c) => c !== "").length >= 2) {
-          headerIdx = i;
+      let headerIndex = 0;
+      for (let index = 0; index < Math.min(20, raw.length); index++) {
+        const cells = stringsRow(raw[index]);
+        if (cells.filter((cell) => cell !== "").length >= 2) {
+          headerIndex = index;
           break;
         }
       }
 
-      const header = uniqHeaders(stringsRow(raw[headerIdx]));
-      const bodyRows = raw.slice(headerIdx + 1);
+      const header = uniqHeaders(stringsRow(raw[headerIndex]));
+      const bodyRows = raw.slice(headerIndex + 1);
 
       const bodyObjects: RawRow[] = bodyRows.map((row) => {
-        const obj: RawRow = {};
-        for (let i = 0; i < header.length; i++) {
-          obj[header[i]] = row[i] ?? "";
+        const objectRow: RawRow = {};
+        for (let index = 0; index < header.length; index++) {
+          objectRow[header[index]] = row[index] ?? "";
         }
-        return obj;
+        return objectRow;
       });
 
       setColumns(header);
       setSheetRows(bodyObjects);
 
-      // Авто-гадывание соответствий колонок
       const guessParentUnit = (headers: string[]): string | null =>
-        headers.find((h) =>
-          /родитель|parent/i.test((h ?? "").toString())
+        headers.find((headerName) =>
+          /родитель|parent/i.test((headerName ?? "").toString())
         ) ?? null;
 
       const guessUnit = (headers: string[]): string | null =>
-        headers.find((h) => {
-          const low = (h ?? "").toString().toLowerCase();
+        headers.find((headerName) => {
+          const lower = (headerName ?? "").toString().toLowerCase();
           return (
-            /подраздел|отдел|управлен|служб|unit/.test(low) &&
-            !/родитель/.test(low)
+            /подраздел|отдел|управлен|служб|unit/.test(lower) &&
+            !/родитель/.test(lower)
           );
         }) ?? null;
 
-      const guess = (headers: string[], needle: RegExp): string | null =>
-        headers.find((h) =>
-          needle.test((h ?? "").toString().toLowerCase())
+      const guess = (
+        headers: string[],
+        needle: RegExp
+      ): string | null =>
+        headers.find((headerName) =>
+          needle.test((headerName ?? "").toString().toLowerCase())
         ) ?? null;
 
       setMapping({
@@ -273,14 +561,14 @@ export default function ImportRosterPage() {
         phone: guess(header, /тел|phone|моб/),
         email: guess(header, /mail|почт|e-?mail/),
       });
-    } catch (e: any) {
-      console.error(e);
-      setParseError(e?.message || "Ошибка при чтении файла.");
+    } catch (error_: any) {
+      console.error(error_);
+      setParseError(error_?.message || "Ошибка при чтении файла.");
     }
   };
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (file) {
       void handleFile(file);
     }
@@ -324,43 +612,47 @@ export default function ImportRosterPage() {
         fetchPyrotechnicians(),
       ]);
 
-      const unitsById = new Map<number, OrganizationUnit>();
-      units.forEach((u) => unitsById.set(u.id, u));
+      const { unitsById, unitNameToId } = buildImportMaps(
+        units,
+        teams,
+        pyros
+      );
 
-      const unitKey = (parentName: string | null, name: string) => {
-        const parent = parentName ? normKey(parentName) : "root";
-        return `${parent}::${normKey(name)}`;
-      };
+      const unitKey = (parentName: string | null, name: string) =>
+        createUnitKeyWithParent(parentName, name);
 
       const existingUnitKeys = new Set<string>();
-      units.forEach((u) => {
+      units.forEach((unit) => {
         const parentName =
-          u.parent_id != null ? unitsById.get(u.parent_id)?.name ?? null : null;
-        existingUnitKeys.add(unitKey(parentName, u.name));
+          unit.parent_id != null
+            ? unitsById.get(unit.parent_id)?.name ?? null
+            : null;
+        existingUnitKeys.add(unitKey(parentName, unit.name));
       });
 
       const existingTeamKeys = new Set<string>();
-      teams.forEach((t) => {
-        const uid = t.organization_unit_id ?? 0;
-        existingTeamKeys.add(`${uid}::${normKey(t.name)}`);
+      teams.forEach((team) => {
+        const unitId = team.organization_unit_id ?? 0;
+        existingTeamKeys.add(`${unitId}::${normKey(team.name)}`);
       });
 
       const existingPyroNames = new Set<string>();
-      pyros.forEach((p) => existingPyroNames.add(normKey(p.full_name)));
+      pyros.forEach((pyro) =>
+        existingPyroNames.add(normKey(pyro.full_name))
+      );
 
-      const unitsToCreateSet = new Map<string, { parent: string | null; name: string }>();
+      const unitsToCreateSet = new Map<
+        string,
+        { parent: string | null; name: string }
+      >();
       const teamsToCreateSet = new Set<string>();
       const pyrosToCreate: NormalizedRow[] = [];
 
-      // Предполагаем, что названия подразделений уникальны (как в твоей штатке)
-      const unitNameToId = new Map<string, number>();
-      units.forEach((u) => unitNameToId.set(normKey(u.name), u.id));
-
-      for (const row of normalizedRows) {
-        const uKey = unitKey(row.parentUnit, row.unit);
-        if (!existingUnitKeys.has(uKey)) {
-          if (!unitsToCreateSet.has(uKey)) {
-            unitsToCreateSet.set(uKey, {
+      normalizedRows.forEach((row) => {
+        const unitKeyValue = unitKey(row.parentUnit, row.unit);
+        if (!existingUnitKeys.has(unitKeyValue)) {
+          if (!unitsToCreateSet.has(unitKeyValue)) {
+            unitsToCreateSet.set(unitKeyValue, {
               parent: row.parentUnit,
               name: row.unit,
             });
@@ -368,8 +660,8 @@ export default function ImportRosterPage() {
         }
 
         const unitId = unitNameToId.get(normKey(row.unit)) ?? 0;
-        const tKeyExisting = `${unitId}::${normKey(row.team)}`;
-        if (!existingTeamKeys.has(tKeyExisting)) {
+        const teamExistingKey = `${unitId}::${normKey(row.team)}`;
+        if (!existingTeamKeys.has(teamExistingKey)) {
           teamsToCreateSet.add(`${row.unit}::${row.team}`);
         }
 
@@ -378,22 +670,24 @@ export default function ImportRosterPage() {
           existingPyroNames.add(pyroKey);
           pyrosToCreate.push(row);
         }
-      }
+      });
 
       const unitsToCreate = Array.from(unitsToCreateSet.values());
-      const teamsToCreate = Array.from(teamsToCreateSet).map((k) => {
-        const [unit, team] = k.split("::");
-        return { unit, team };
-      });
+      const teamsToCreate = Array.from(teamsToCreateSet).map(
+        (key) => {
+          const [unit, team] = key.split("::");
+          return { unit, team };
+        }
+      );
 
       setDryRun({
         unitsToCreate,
         teamsToCreate,
         pyrosToCreate,
       });
-    } catch (e: any) {
-      console.error(e);
-      setErr(e?.message || "Не удалось выполнить анализ.");
+    } catch (error_: any) {
+      console.error(error_);
+      setErr(error_?.message || "Не удалось выполнить анализ.");
     } finally {
       setLoadingDryRun(false);
     }
@@ -416,214 +710,66 @@ export default function ImportRosterPage() {
         fetchPyrotechnicians(),
       ]);
 
-      const unitsById = new Map<number, OrganizationUnit>();
-      units.forEach((u) => unitsById.set(u.id, u));
+      const importMaps = buildImportMaps(units, teams, pyros);
 
-      const unitNameToId = new Map<string, number>();
-      units.forEach((u) => unitNameToId.set(normKey(u.name), u.id));
-
-      const teamByKey = new Map<string, Team>();
-      teams.forEach((t) => {
-        const uid = t.organization_unit_id ?? 0;
-        const key = `${uid}::${normKey(t.name)}`;
-        teamByKey.set(key, t);
-      });
-
-      const pyroNameToId = new Map<string, number>();
-      pyros.forEach((p) => pyroNameToId.set(normKey(p.full_name), p.id));
-
-      // Подготовка списков для оценки прогресса
-      const unitPairsMap = new Map<string, { parent: string | null; name: string }>();
-      for (const row of normalizedRows) {
-        const key = `${row.parentUnit ?? ""}::${row.unit}`;
-        if (!unitPairsMap.has(key)) {
-          unitPairsMap.set(key, { parent: row.parentUnit, name: row.unit });
-        }
-      }
-      const unitPairs = Array.from(unitPairsMap.values());
-
-      const uniquePyroNames = new Set<string>();
-      normalizedRows.forEach((r) => uniquePyroNames.add(normKey(r.fullName)));
-
-      const teamGroupKeys = new Set<string>();
-      normalizedRows.forEach((r) =>
-        teamGroupKeys.add(`${r.unit}::${r.team}`)
-      );
+      const unitPairs = collectUnitPairs(normalizedRows);
+      const uniquePyroNames = collectUniquePyroNames(normalizedRows);
+      const teamGroupKeys = collectTeamGroupKeys(normalizedRows);
 
       const totalSteps =
-        unitPairs.length + uniquePyroNames.size + teamGroupKeys.size;
+        unitPairs.length +
+        uniquePyroNames.size +
+        teamGroupKeys.size;
       let doneSteps = 0;
 
       const updateProgress = () => {
         setProgress(
-          Math.round((doneSteps / Math.max(totalSteps, 1)) * 100)
+          Math.round(
+            (doneSteps / Math.max(totalSteps, 1)) * 100
+          )
         );
       };
 
-      // --- Шаг 1. Создаём недостающие подразделения с учётом родителей ---
-      const pendingUnits = unitPairs.filter(
-        (p) => !unitNameToId.has(normKey(p.name))
+      const incrementProgress = () => {
+        doneSteps += 1;
+        updateProgress();
+      };
+
+      const addLog = (line: string) => {
+        setImportLog((previous) => [...previous, line]);
+      };
+
+      await createMissingUnitsWithParents(
+        unitPairs,
+        importMaps,
+        addLog,
+        incrementProgress
       );
 
-      let safety = 0;
-      while (pendingUnits.length && safety < 1000) {
-        safety += 1;
-        let progressed = false;
+      await createMissingPyrotechniciansForRows(
+        normalizedRows,
+        importMaps.pyroNameToId,
+        addLog,
+        incrementProgress
+      );
 
-        for (let i = pendingUnits.length - 1; i >= 0; i--) {
-          const u = pendingUnits[i];
+      await syncTeamsForGroups(
+        normalizedRows,
+        importMaps,
+        addLog,
+        incrementProgress
+      );
 
-          if (unitNameToId.has(normKey(u.name))) {
-            pendingUnits.splice(i, 1);
-            continue;
-          }
-
-          let parentId: number | null = null;
-          if (u.parent) {
-            const pId = unitNameToId.get(normKey(u.parent));
-            if (pId == null) {
-              // Родитель ещё не создан
-              continue;
-            }
-            parentId = pId;
-          }
-
-          const payload = {
-            name: u.name,
-            parent_id: parentId,
-            description: null,
-          };
-
-          const created = await createOrganizationUnit(
-            payload as any
-          );
-
-          unitNameToId.set(normKey(created.name), created.id);
-          unitsById.set(created.id, created);
-
-          doneSteps += 1;
-          updateProgress();
-
-          setImportLog((prev) => [
-            ...prev,
-            `Создано подразделение "${u.name}" (родитель: ${
-              u.parent ?? "—"
-            })`,
-          ]);
-
-          pendingUnits.splice(i, 1);
-          progressed = true;
-        }
-
-        if (!progressed) {
-          // На всякий случай, чтобы не попасть в бесконечный цикл,
-          // если какая-то цепочка не может быть разрешена.
-          break;
-        }
-      }
-
-      // --- Шаг 2. Создаём недостающих сотрудников ---
-      for (const row of normalizedRows) {
-        const key = normKey(row.fullName);
-        if (pyroNameToId.has(key)) {
-          continue;
-        }
-
-        const payload: PyrotechnicianCreate = {
-          full_name: row.fullName,
-          phone: row.phone || undefined,
-          email: row.email || undefined,
-          role: row.role || undefined,
-          rank: row.rank || undefined,
-        };
-
-        const created = await createPyrotechnician(payload);
-
-        pyroNameToId.set(key, created.id);
-
-        doneSteps += 1;
-        updateProgress();
-
-        setImportLog((prev) => [
-          ...prev,
-          `Создан сотрудник "${row.fullName}"`,
-        ]);
-      }
-
-      // --- Шаг 3. Создаём / обновляем команды и их состав ---
-
-      const groups = new Map<
-        string,
-        { unitName: string; teamName: string; rows: NormalizedRow[] }
-      >();
-
-      for (const row of normalizedRows) {
-        const key = `${row.unit}::${row.team}`;
-        let group = groups.get(key);
-        if (!group) {
-          group = {
-            unitName: row.unit,
-            teamName: row.team,
-            rows: [],
-          };
-          groups.set(key, group);
-        }
-        group.rows.push(row);
-      }
-
-      for (const [, group] of groups) {
-        const unitId = unitNameToId.get(normKey(group.unitName));
-        if (!unitId) {
-          setImportLog((prev) => [
-            ...prev,
-            `⚠ Не найдено подразделение "${group.unitName}" для команды "${group.teamName}"`,
-          ]);
-          continue;
-        }
-
-        const memberIds: number[] = [];
-        for (const row of group.rows) {
-          const id = pyroNameToId.get(normKey(row.fullName));
-          if (id) {
-            memberIds.push(id);
-          }
-        }
-
-        const key = `${unitId}::${normKey(group.teamName)}`;
-        const existingTeam = teamByKey.get(key);
-
-        if (existingTeam) {
-          await patchTeam(existingTeam.id, {
-            member_ids: memberIds,
-          });
-          setImportLog((prev) => [
-            ...prev,
-            `Обновлена команда "${group.teamName}" в подразделении "${group.unitName}" (${memberIds.length} сотрудников)`,
-          ]);
-        } else {
-          await createTeam({
-            name: group.teamName,
-            organization_unit_id: unitId,
-            member_ids: memberIds,
-          });
-          setImportLog((prev) => [
-            ...prev,
-            `Создана команда "${group.teamName}" в подразделении "${group.unitName}" (${memberIds.length} сотрудников)`,
-          ]);
-        }
-
-        doneSteps += 1;
-        updateProgress();
-      }
-
-      setImportLog((prev) => [...prev, "Импорт успешно завершён."]);
-    } catch (e: any) {
-      if (!isCanceled(e)) {
-        console.error(e);
-        setErr(e?.message || "При импорте произошла ошибка.");
-        setImportLog((prev) => [
-          ...prev,
-          `Ошибка: ${e?.message || String(e)}`,
+      addLog("Импорт успешно завершён.");
+    } catch (error_: any) {
+      if (!isCanceled(error_)) {
+        console.error(error_);
+        const message =
+          error_?.message || "При импорте произошла ошибка.";
+        setErr(message);
+        setImportLog((previous) => [
+          ...previous,
+          `Ошибка: ${message}`,
         ]);
       }
     } finally {
@@ -722,19 +868,19 @@ export default function ImportRosterPage() {
                           <Select
                             label={label}
                             value={mapping[key] ?? ""}
-                            onChange={(e) =>
-                              setMapping((m) => ({
-                                ...m,
-                                [key]: e.target.value || null,
+                            onChange={(event) =>
+                              setMapping((previous) => ({
+                                ...previous,
+                                [key]: event.target.value || null,
                               }))
                             }
                           >
                             <MenuItem value="">
                               <em>— не использовать —</em>
                             </MenuItem>
-                            {columns.map((c) => (
-                              <MenuItem key={c} value={c}>
-                                {c}
+                            {columns.map((columnName) => (
+                              <MenuItem key={columnName} value={columnName}>
+                                {columnName}
                               </MenuItem>
                             ))}
                           </Select>
@@ -799,20 +945,22 @@ export default function ImportRosterPage() {
                           Новые подразделения:
                         </Typography>
                         <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-                          {dryRun.unitsToCreate.slice(0, 6).map((u) => (
+                          {dryRun.unitsToCreate.slice(0, 6).map((unit) => (
                             <Typography
-                              key={`${u.parent ?? "root"}::${u.name}`}
+                              key={`${unit.parent ?? "root"}::${unit.name}`}
                               variant="caption"
                             >
-                              {u.parent
-                                ? `${u.parent} → ${u.name}`
-                                : u.name}
+                              {unit.parent
+                                ? `${unit.parent} → ${unit.name}`
+                                : unit.name}
                             </Typography>
                           ))}
                           {dryRun.unitsToCreate.length > 6 && (
-                            <Typography variant="caption" color="text.secondary">
-                              … и ещё{" "}
-                              {dryRun.unitsToCreate.length - 6}
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              … и ещё {dryRun.unitsToCreate.length - 6}
                             </Typography>
                           )}
                         </Stack>
@@ -831,7 +979,13 @@ export default function ImportRosterPage() {
 
           {/* Импорт и лог */}
           <Grid item xs={12} lg={4}>
-            <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <Card
+              sx={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               <CardContent sx={{ flexGrow: 0 }}>
                 <Stack
                   direction="row"
