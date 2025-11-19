@@ -36,17 +36,19 @@ export interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
 }
 
-export function DataTable<T>({
-  columns,
-  rows,
-  getRowId,
-  loading = false,
-  error = null,
-  emptyMessage = "Нет данных",
-  size = "medium",
-  stickyHeader = false,
-  onRowClick,
-}: DataTableProps<T>) {
+export function DataTable<T>(props: Readonly<DataTableProps<T>>) {
+  const {
+    columns,
+    rows,
+    getRowId,
+    loading = false,
+    error = null,
+    emptyMessage = "Нет данных",
+    size = "medium",
+    stickyHeader = false,
+    onRowClick,
+  } = props;
+
   const colSpan = columns.length || 1;
 
   /** ─────────────────────────────────────────────

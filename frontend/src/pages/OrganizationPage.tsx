@@ -85,7 +85,7 @@ export default function OrganizationPage() {
   };
 
   const handleAddChildUnit = (node: OrganizationNode) => {
-    const parentId = parseInt(node.id.replace("unit-", ""));
+    const parentId = Number.parseInt(node.id.replace("unit-", ""));
     setUnitToEdit(null);
     setParentUnitId(parentId);
     setUnitDialogOpen(true);
@@ -106,7 +106,7 @@ export default function OrganizationPage() {
       return;
     }
     try {
-      const unitId = parseInt(node.id.replace("unit-", ""));
+      const unitId = Number.parseInt(node.id.replace("unit-", ""));
       await deleteOrganizationUnit(unitId);
       notifySuccess(`Подразделение «${node.name}» удалено.`);
       await load();
@@ -119,14 +119,14 @@ export default function OrganizationPage() {
   // --- Команды ---
 
   const handleAddTeam = (node: OrganizationNode) => {
-    const parentId = parseInt(node.id.replace("unit-", ""));
+    const parentId = Number.parseInt(node.id.replace("unit-", ""));
     setParentUnitId(parentId);
     setCreateTeamDialogOpen(true);
   };
 
   const handleEditTeam = async (node: OrganizationNode) => {
     try {
-      const teamId = parseInt(node.id.replace("team-", ""));
+      const teamId = Number.parseInt(node.id.replace("team-", ""));
       const teamData = await fetchTeamById(teamId);
       setTeamToEdit(teamData);
       setIsEditTeamDialogOpen(true);
