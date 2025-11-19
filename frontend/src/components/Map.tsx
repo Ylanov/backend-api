@@ -18,7 +18,8 @@ type Props = {
 
 const KEY = import.meta.env.VITE_YMAPS_API_KEY as string | undefined;
 
-export default function Map({ points, onPick, center = [55.751244, 37.618423], zoom = 9 }: Props) {
+// ИСПРАВЛЕНИЕ: Переименовали Map -> MapComponent
+export default function MapComponent({ points, onPick, center = [55.751244, 37.618423], zoom = 9 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);          // инстанс карты
   const placemarkLayerRef = useRef<any>(null); // слой с маркерами
@@ -71,7 +72,7 @@ export default function Map({ points, onPick, center = [55.751244, 37.618423], z
       }
       placemarkLayerRef.current = null;
     };
-  }, [KEY, center.toString(), zoom, onPick]);
+  }, [center.toString(), zoom, onPick]); // KEY убран из зависимостей т.к. это константа
 
   // Обновление маркеров, когда points меняются (без пересоздания карты)
   useEffect(() => {

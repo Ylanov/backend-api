@@ -12,7 +12,7 @@ import {
   Typography,
   Paper,
   Button,
-  Checkbox, // Импортируем Checkbox
+  Checkbox,
 } from "@mui/material";
 import FolderIcon from "@mui/icons-material/Folder";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -43,13 +43,13 @@ type TreeProps = {
   onToggleSelection: (id: string) => void; // Функция для изменения выделения
 };
 
-// Функция парсинга ID (без изменений)
+// Функция парсинга ID
 function parseNumericId(s: string): { type: string, id: number } | null {
   const match = s.match(/^(unit|team|pyro)-(\d+)$/);
   return match && match[2] ? { type: match[1], id: Number.parseInt(match[2], 10) } : null;
 }
 
-// Draggable-компонент для сотрудника (теперь с чекбоксом)
+// --- КОМПОНЕНТ: Сотрудник (лист дерева) ---
 function DraggablePyroInTree({ node, onEdit, onDelete, isSelected, onToggleSelection }: {
     node: OrganizationNode,
     onEdit: () => void,
@@ -58,6 +58,7 @@ function DraggablePyroInTree({ node, onEdit, onDelete, isSelected, onToggleSelec
     onToggleSelection: (id: string) => void
 }) {
   const parsed = parseNumericId(node.id);
+  // Хук useDraggable вызывается корректно (на верхнем уровне компонента)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: node.id,
     data: { type: 'pyro', id: parsed?.id, name: node.name, source: 'tree' },
@@ -99,6 +100,104 @@ function DraggablePyroInTree({ node, onEdit, onDelete, isSelected, onToggleSelec
   );
 }
 
+// --- НОВЫЙ КОМПОНЕНТ: Узел дерева (Unit или Team) ---
+// Вынос этого компонента решает проблему вызова хуков useState и useDroppable внутри цикла
+type OrganizationTreeNodeProps = {
+  node: OrganizationNode;
+  level: number;
+  isOpen: boolean;
+  onToggle: () => void;
+  isSelected: boolean;
+  onAddUnit: (parentId: number | null) => void;
+  onEditUnit: (unit: OrganizationUnit) => void;
+  onEditTeam: (team: Team) => void;
+  onDeleteUnit: (unit: OrganizationUnit) => void;
+  onDeleteTeam: (team: Team) => void;
+  teamsMap: Map<number, Team>;
+  onToggleSelection: (id: string) => void;
+  childrenNodes: React.ReactNode;
+};
+
+function OrganizationTreeNode(props: OrganizationTreeNodeProps) {
+  const { node, level, isOpen, onToggle, isSelected, childrenNodes } = props;
+
+  // 1. Хук useState теперь легален
+  const [hover, setHover] = useState(false);
+
+  const parsedId = parseNumericId(node.id);
+  if (!parsedId) return null;
+  const { id, type } = parsedId;
+  const hasChildren = node.children && node.children.length > 0;
+
+  // 2. Хук useDroppable теперь легален (вызывается на верхнем уровне компонента, а не в цикле)
+  const { isOver, setNodeRef } = useDroppable({ id: node.id, data: { type, id } });
+
+  return (
+    <Fragment>
+      <ListItem
+        disablePadding
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
+      >
+        <Paper
+          ref={setNodeRef}
+          variant="outlined"
+          sx={{
+            width: '100%', p: 1, ml: level * 2,
+            borderColor: isOver ? 'primary.main' : 'divider',
+            bgcolor: isSelected ? 'action.selected' : 'background.paper',
+            borderWidth: isOver ? 2 : 1,
+          }}
+        >
+          <Stack direction="row" alignItems="center">
+            <Checkbox
+              checked={isSelected}
+              onChange={() => props.onToggleSelection(node.id)}
+            />
+            <IconButton size="small" onClick={onToggle} sx={{ visibility: hasChildren ? 'visible' : 'hidden' }}>
+              {isOpen ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+            </IconButton>
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              {type === 'unit' ? <FolderIcon color="primary"/> : <GroupsIcon color="action" />}
+            </ListItemIcon>
+            <Box sx={{ flexGrow: 1 }}>
+                <Typography variant="subtitle1" fontWeight={600}>{node.name}</Typography>
+                {node.description && <Typography variant="caption" color="text.secondary">{node.description}</Typography>}
+            </Box>
+
+            {hover && (
+              <Stack direction="row">
+                {type === 'unit' && (
+                  <>
+                    <Tooltip title="Добавить подраздел"><IconButton size="small" onClick={() => props.onAddUnit(id)}><CreateNewFolderIcon/></IconButton></Tooltip>
+                    <Tooltip title="Редактировать"><IconButton size="small" onClick={() => props.onEditUnit({ id, name: node.name, description: node.description } as OrganizationUnit)}><EditIcon /></IconButton></Tooltip>
+                    <Tooltip title="Удалить"><IconButton size="small" color="error" onClick={() => props.onDeleteUnit({ id, name: node.name } as OrganizationUnit)}><DeleteIcon /></IconButton></Tooltip>
+                  </>
+                )}
+                {type === 'team' && (
+                    <>
+                        <Tooltip title="Редактировать"><IconButton size="small" onClick={() => props.onEditTeam(props.teamsMap.get(id)!)}><EditIcon /></IconButton></Tooltip>
+                        <Tooltip title="Удалить"><IconButton size="small" color="error" onClick={() => props.onDeleteTeam(props.teamsMap.get(id)!)}><DeleteIcon /></IconButton></Tooltip>
+                    </>
+                )}
+              </Stack>
+            )}
+          </Stack>
+        </Paper>
+
+        {hasChildren && (
+          <Collapse in={isOpen} timeout="auto" unmountOnExit sx={{ width: '100%' }}>
+            <List disablePadding>
+              {childrenNodes}
+            </List>
+          </Collapse>
+        )}
+      </ListItem>
+    </Fragment>
+  );
+}
+
 // Основной компонент дерева
 export default function OrganizationTree(props: TreeProps) {
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
@@ -106,7 +205,6 @@ export default function OrganizationTree(props: TreeProps) {
 
   const renderNodes = (nodes: OrganizationNode[], level: number): JSX.Element[] => {
     return nodes.map((node) => {
-      const [hover, setHover] = useState(false);
       const parsedId = parseNumericId(node.id);
       if (!parsedId) return <Fragment key={node.id}></Fragment>;
 
@@ -129,74 +227,26 @@ export default function OrganizationTree(props: TreeProps) {
         );
       }
 
-      const { isOver, setNodeRef } = useDroppable({ id: node.id, data: { type, id } });
-      const hasChildren = node.children && node.children.length > 0;
-      const isOpen = !!openMap[node.id];
-
       // --- Отрисовка УЗЛА-КОМАНДЫ или УЗЛА-ПОДРАЗДЕЛЕНИЯ ---
+      // Используем новый компонент OrganizationTreeNode.
+      // Теперь хуки вызываются внутри него, а не здесь (в цикле map).
       return (
-        <Fragment key={node.id}>
-          <ListItem
-            disablePadding
-            onMouseEnter={() => setHover(true)}
-            onMouseLeave={() => setHover(false)}
-            sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
-          >
-            <Paper
-              ref={setNodeRef}
-              variant="outlined"
-              sx={{
-                width: '100%', p: 1, ml: level * 2,
-                borderColor: isOver ? 'primary.main' : 'divider',
-                bgcolor: isSelected ? 'action.selected' : 'background.paper',
-                borderWidth: isOver ? 2 : 1,
-              }}
-            >
-              <Stack direction="row" alignItems="center">
-                <Checkbox
-                  checked={isSelected}
-                  onChange={() => props.onToggleSelection(node.id)}
-                />
-                <IconButton size="small" onClick={() => toggle(node.id)} sx={{ visibility: hasChildren ? 'visible' : 'hidden' }}>
-                  {isOpen ? <ExpandMoreIcon /> : <ChevronRightIcon />}
-                </IconButton>
-                <ListItemIcon sx={{ minWidth: 32 }}>
-                  {type === 'unit' ? <FolderIcon color="primary"/> : <GroupsIcon color="action" />}
-                </ListItemIcon>
-                <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="subtitle1" fontWeight={600}>{node.name}</Typography>
-                    {node.description && <Typography variant="caption" color="text.secondary">{node.description}</Typography>}
-                </Box>
-
-                {hover && (
-                  <Stack direction="row">
-                    {type === 'unit' && (
-                      <>
-                        <Tooltip title="Добавить подраздел"><IconButton size="small" onClick={() => props.onAddUnit(id)}><CreateNewFolderIcon/></IconButton></Tooltip>
-                        <Tooltip title="Редактировать"><IconButton size="small" onClick={() => props.onEditUnit({ id, name: node.name, description: node.description } as OrganizationUnit)}><EditIcon /></IconButton></Tooltip>
-                        <Tooltip title="Удалить"><IconButton size="small" color="error" onClick={() => props.onDeleteUnit({ id, name: node.name } as OrganizationUnit)}><DeleteIcon /></IconButton></Tooltip>
-                      </>
-                    )}
-                    {type === 'team' && (
-                        <>
-                            <Tooltip title="Редактировать"><IconButton size="small" onClick={() => props.onEditTeam(props.teamsMap.get(id)!)}><EditIcon /></IconButton></Tooltip>
-                            <Tooltip title="Удалить"><IconButton size="small" color="error" onClick={() => props.onDeleteTeam(props.teamsMap.get(id)!)}><DeleteIcon /></IconButton></Tooltip>
-                        </>
-                    )}
-                  </Stack>
-                )}
-              </Stack>
-            </Paper>
-
-            {hasChildren && (
-              <Collapse in={isOpen} timeout="auto" unmountOnExit sx={{ width: '100%' }}>
-                <List disablePadding>
-                  {renderNodes(node.children!, level + 1)}
-                </List>
-              </Collapse>
-            )}
-          </ListItem>
-        </Fragment>
+        <OrganizationTreeNode
+          key={node.id}
+          node={node}
+          level={level}
+          isOpen={!!openMap[node.id]}
+          onToggle={() => toggle(node.id)}
+          isSelected={isSelected}
+          onAddUnit={props.onAddUnit}
+          onEditUnit={props.onEditUnit}
+          onEditTeam={props.onEditTeam}
+          onDeleteUnit={props.onDeleteUnit}
+          onDeleteTeam={props.onDeleteTeam}
+          teamsMap={props.teamsMap}
+          onToggleSelection={props.onToggleSelection}
+          childrenNodes={<>{node.children && renderNodes(node.children, level + 1)}</>}
+        />
       );
     });
   };

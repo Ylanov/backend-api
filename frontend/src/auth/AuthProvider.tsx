@@ -26,20 +26,19 @@ type AuthContextValue = {
   loading: boolean;
   login: (payload: LoginRequest) => Promise<void>;
   logout: () => void;
-  // --- НОВАЯ ФУНКЦИЯ ---
   setTokenAndUser: (accessToken: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+// ИСПРАВЛЕНИЕ 1: Добавлен readonly к children
+export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const { notifyError } = useNotification();
 
   const [user, setUser] = useState<Pyrotechnician | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // --- НОВАЯ ВНУТРЕННЯЯ ФУНКЦИЯ ---
   // Оборачиваем в useCallback, чтобы ссылка на функцию была стабильной
   const handleSetToken = useCallback(
     async (accessToken: string) => {
@@ -61,7 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [notifyError]
   );
-  // ---------------------------------
 
   // Инициализация из localStorage
   useEffect(() => {
@@ -75,14 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await handleSetToken(stored);
       } catch (e) {
-        // Ошибка уже обработана внутри handleSetToken
+        // ИСПРАВЛЕНИЕ 2: Обрабатываем ошибку (логируем), чтобы блок catch не был пустым
+        console.error("Automatic login failed:", e);
       } finally {
         setLoading(false);
       }
     })();
   }, [handleSetToken]);
 
-  // Оборачиваем в useCallback
   const handleLogin = useCallback(
     async (payload: LoginRequest) => {
       const { access_token } = await apiLogin(payload);
@@ -91,14 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [handleSetToken]
   );
 
-  // Оборачиваем в useCallback
   const handleLogout = useCallback(() => {
     setAuthToken(null);
     setToken(null);
     setUser(null);
   }, []);
 
-  // Функция-обертка для логина с обработкой ошибок, тоже в useCallback
   const loginWrapper = useCallback(
     async (payload: LoginRequest) => {
       try {
@@ -106,17 +102,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e: any) {
         const msg =
           e?.responseData?.detail || e?.message || "Не удалось войти";
-        // Не показываем ошибку "PASSWORD_CHANGE_REQUIRED" пользователю
         if (msg !== "PASSWORD_CHANGE_REQUIRED") {
           notifyError(msg);
         }
-        throw e; // Пробрасываем ошибку для LoginPage
+        throw e;
       }
     },
     [handleLogin, notifyError]
   );
 
-  // ИСПОЛЬЗУЕМ USEMEMO ДЛЯ СОЗДАНИЯ ОБЪЕКТА VALUE
   const value: AuthContextValue = useMemo(
     () => ({
       user,
@@ -140,8 +134,8 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-// Обёртка для защищённых роутов
-export function RequireAuth({ children }: { children: JSX.Element }) {
+// ИСПРАВЛЕНИЕ 3: Добавлен readonly к children
+export function RequireAuth({ children }: { readonly children: JSX.Element }) {
   const { token, loading } = useAuth();
   const location = useLocation();
 
