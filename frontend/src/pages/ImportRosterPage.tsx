@@ -219,20 +219,26 @@ function buildImportMaps(
   pyros: { id: number; full_name: string }[]
 ): ImportMaps {
   const unitsById = new Map<number, OrganizationUnit>();
-  units.forEach((unit) => unitsById.set(unit.id, unit));
+  for (const unit of units) {
+    unitsById.set(unit.id, unit);
+  }
 
   const unitNameToId = new Map<string, number>();
-  units.forEach((unit) => unitNameToId.set(normKey(unit.name), unit.id));
+  for (const unit of units) {
+    unitNameToId.set(normKey(unit.name), unit.id);
+  }
 
   const teamByKey = new Map<string, Team>();
-  teams.forEach((team) => {
+  for (const team of teams) {
     const unitId = team.organization_unit_id ?? 0;
     const key = `${unitId}::${normKey(team.name)}`;
     teamByKey.set(key, team);
-  });
+  }
 
   const pyroNameToId = new Map<string, number>();
-  pyros.forEach((pyro) => pyroNameToId.set(normKey(pyro.full_name), pyro.id));
+  for (const pyro of pyros) {
+    pyroNameToId.set(normKey(pyro.full_name), pyro.id);
+  }
 
   return { unitsById, unitNameToId, teamByKey, pyroNameToId };
 }
@@ -250,13 +256,17 @@ function collectUnitPairs(rows: NormalizedRow[]): UnitPair[] {
 
 function collectUniquePyroNames(rows: NormalizedRow[]): Set<string> {
   const uniqueNames = new Set<string>();
-  rows.forEach((row) => uniqueNames.add(normKey(row.fullName)));
+  for (const row of rows) {
+    uniqueNames.add(normKey(row.fullName));
+  }
   return uniqueNames;
 }
 
 function collectTeamGroupKeys(rows: NormalizedRow[]): Set<string> {
   const keys = new Set<string>();
-  rows.forEach((row) => keys.add(`${row.unit}::${row.team}`));
+  for (const row of rows) {
+    keys.add(`${row.unit}::${row.team}`);
+  }
   return keys;
 }
 
@@ -276,13 +286,7 @@ async function createMissingUnitsWithParents(
 ): Promise<void> {
   const { unitsById, unitNameToId } = importMaps;
 
-  const existingKeys = new Set<string>();
-  unitsById.forEach((unit) => {
-    const parentName =
-      unit.parent_id != null ? unitsById.get(unit.parent_id)?.name ?? null : null;
-    const key = createUnitKeyWithParent(parentName, unit.name);
-    existingKeys.add(key);
-  });
+  // УДАЛЁН БЛОК С existingKeys (он был не нужен)
 
   const pendingUnits = unitPairs.filter(
     (pair) => !unitNameToId.has(normKey(pair.name))
@@ -296,20 +300,24 @@ async function createMissingUnitsWithParents(
 
     for (let index = pendingUnits.length - 1; index >= 0; index--) {
       const pending = pendingUnits[index];
+      const nameKey = normKey(pending.name);
 
-      if (unitNameToId.has(normKey(pending.name))) {
+      if (unitNameToId.has(nameKey)) {
         pendingUnits.splice(index, 1);
         continue;
       }
 
-      let parentId: number | null = null;
-      if (pending.parent) {
-        const parentUnitId = unitNameToId.get(normKey(pending.parent));
-        if (parentUnitId == null) {
-          continue;
-        }
-        parentId = parentUnitId;
+      // Оптимизация: сразу пытаемся найти ID родителя
+      const parentIdFound = pending.parent
+        ? unitNameToId.get(normKey(pending.parent))
+        : null;
+
+      // Если родитель задан, но его ID нет в карте, значит родитель еще не создан -> пропускаем
+      if (pending.parent && parentIdFound === undefined) {
+        continue;
       }
+
+      const parentId = parentIdFound ?? null;
 
       const created = await createOrganizationUnit({
         name: pending.name,
@@ -317,7 +325,7 @@ async function createMissingUnitsWithParents(
         description: null,
       } as any);
 
-      unitNameToId.set(normKey(created.name), created.id);
+      unitNameToId.set(nameKey, created.id);
       unitsById.set(created.id, created);
 
       incrementProgress();
@@ -622,24 +630,24 @@ export default function ImportRosterPage() {
         createUnitKeyWithParent(parentName, name);
 
       const existingUnitKeys = new Set<string>();
-      units.forEach((unit) => {
+      for (const unit of units) {
         const parentName =
           unit.parent_id != null
             ? unitsById.get(unit.parent_id)?.name ?? null
             : null;
         existingUnitKeys.add(unitKey(parentName, unit.name));
-      });
+      }
 
       const existingTeamKeys = new Set<string>();
-      teams.forEach((team) => {
+      for (const team of teams) {
         const unitId = team.organization_unit_id ?? 0;
         existingTeamKeys.add(`${unitId}::${normKey(team.name)}`);
-      });
+      }
 
       const existingPyroNames = new Set<string>();
-      pyros.forEach((pyro) =>
-        existingPyroNames.add(normKey(pyro.full_name))
-      );
+      for (const pyro of pyros) {
+        existingPyroNames.add(normKey(pyro.full_name));
+      }
 
       const unitsToCreateSet = new Map<
         string,
@@ -648,7 +656,7 @@ export default function ImportRosterPage() {
       const teamsToCreateSet = new Set<string>();
       const pyrosToCreate: NormalizedRow[] = [];
 
-      normalizedRows.forEach((row) => {
+      for (const row of normalizedRows) {
         const unitKeyValue = unitKey(row.parentUnit, row.unit);
         if (!existingUnitKeys.has(unitKeyValue)) {
           if (!unitsToCreateSet.has(unitKeyValue)) {
@@ -670,7 +678,7 @@ export default function ImportRosterPage() {
           existingPyroNames.add(pyroKey);
           pyrosToCreate.push(row);
         }
-      });
+      }
 
       const unitsToCreate = Array.from(unitsToCreateSet.values());
       const teamsToCreate = Array.from(teamsToCreateSet).map(
