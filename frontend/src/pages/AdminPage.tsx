@@ -111,11 +111,11 @@ export default function AdminPage() {
       notifySuccess(
         `Временный пароль сгенерирован для «${pyrotechnician.full_name}»`,
       );
-    } catch (errorAny: any) {
-      console.error(errorAny);
-      notifyError(errorAny?.message || "Не удалось сбросить пароль.");
+    } catch (error_: any) {
+      console.error(error_);
+      notifyError(error_?.message || "Не удалось сбросить пароль.");
       setPasswordDialogOpen(false);
-    } finally {
+    }    finally {
       setPasswordLoading(false);
     }
   };

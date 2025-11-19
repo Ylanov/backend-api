@@ -1,5 +1,5 @@
 // frontend/src/pages/DocumentsPage.tsx
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Box,
   Paper,
@@ -30,21 +30,33 @@ export default function DocumentsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // --- Список документов через React Query ---
+  const documentsQuery = useQuery<Document[], Error>({
+    queryKey: ["documents"],
+    // Без сигнала и контекста — просто вызываем функцию, она сама знает, что делать
+    queryFn: () => fetchDocuments(),
+  });
+
   const {
-    data: docs = [],
+    data,
     isLoading,
     isFetching,
     isError,
     error,
     refetch: refetchDocuments,
-  } = useQuery<Document[], any>({
-    queryKey: ["documents"],
-    queryFn: ({ signal }) => fetchDocuments(signal),
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось загрузить список документов.";
-      notifyError(msg);
-    },
-  });
+  } = documentsQuery;
+
+  // Уведомление об ошибке загрузки документов через useEffect,
+  // вместо onError в options (во избежание конфликтов типов)
+  useEffect(() => {
+    if (isError && error) {
+      const message =
+        error.message || "Не удалось загрузить список документов.";
+      notifyError(message);
+    }
+  }, [isError, error, notifyError]);
+
+  // Если данных ещё нет — используем пустой массив (тип выводится автоматически)
+  const docs = data ?? [];
 
   const docsLoading = isLoading || isFetching;
 
@@ -60,10 +72,11 @@ export default function DocumentsPage() {
       // Явно перезагружаем список документов
       await refetchDocuments();
     },
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось загрузить документы.";
-      setLocalError(msg);
-      notifyError(msg);
+    onError: (error_: any) => {
+      const message =
+        error_?.message || "Не удалось загрузить документы.";
+      setLocalError(message);
+      notifyError(message);
     },
   });
 
@@ -77,10 +90,11 @@ export default function DocumentsPage() {
       // После удаления тоже сразу перезагружаем список
       await refetchDocuments();
     },
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось удалить документ.";
-      setLocalError(msg);
-      notifyError(msg);
+    onError: (error_: any) => {
+      const message =
+        error_?.message || "Не удалось удалить документ.";
+      setLocalError(message);
+      notifyError(message);
     },
   });
 
@@ -88,69 +102,71 @@ export default function DocumentsPage() {
     fileInputRef.current?.click();
   };
 
-  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
     if (!files || files.length === 0) return;
 
     setLocalError(null);
     uploadMutation.mutate(files);
 
     // сбрасываем input, чтобы можно было выбрать те же файлы ещё раз
-    e.target.value = "";
+    event.target.value = "";
   };
 
-  const handleDelete = (doc: Document) => {
+  const handleDelete = (documentItem: Document) => {
     if (
       !window.confirm(
-        `Удалить документ "${doc.title || doc.original_name}"?`
+        `Удалить документ "${documentItem.title || documentItem.original_name}"?`,
       )
     ) {
       return;
     }
     setLocalError(null);
-    deleteMutation.mutate(doc.id);
+    deleteMutation.mutate(documentItem.id);
   };
 
   const columns: DataTableColumn<Document>[] = [
     {
       id: "title",
       label: "Название",
-      render: (doc) => doc.title,
+      render: (documentItem) => documentItem.title,
     },
     {
       id: "original_name",
       label: "Оригинальное имя",
-      render: (doc) => doc.original_name,
+      render: (documentItem) => documentItem.original_name,
       hideOnXs: true,
     },
     {
       id: "mime_type",
       label: "Тип",
-      render: (doc) => doc.mime_type,
+      render: (documentItem) => documentItem.mime_type,
       hideOnXs: true,
     },
     {
       id: "size",
       label: "Размер",
-      render: (doc) => `${(doc.size / 1024).toFixed(1)} КБ`,
+      render: (documentItem) =>
+        `${(documentItem.size / 1024).toFixed(1)} КБ`,
       hideOnXs: true,
     },
     {
       id: "uploaded_at",
       label: "Загружен",
-      render: (doc) => new Date(doc.uploaded_at).toLocaleString(),
+      render: (documentItem) =>
+        new Date(documentItem.uploaded_at).toLocaleString(),
       hideOnXs: true,
     },
     {
       id: "actions",
       label: "Действия",
       align: "right",
-      render: (doc) => (
+      render: (documentItem) => (
         <>
           <Tooltip title="Скачать">
             <IconButton
               component="a"
-              href={doc.download_url}
+              href={documentItem.download_url}
               target="_blank"
               rel="noopener noreferrer"
               size="small"
@@ -162,7 +178,7 @@ export default function DocumentsPage() {
           <Tooltip title="Удалить">
             <IconButton
               color="error"
-              onClick={() => handleDelete(doc)}
+              onClick={() => handleDelete(documentItem)}
               disabled={deleteMutation.isPending}
               size="small"
             >
@@ -177,7 +193,7 @@ export default function DocumentsPage() {
   const tableError =
     localError ||
     (isError
-      ? (error as any)?.message || "Не удалось загрузить список документов."
+      ? error?.message || "Не удалось загрузить список документов."
       : null);
 
   return (
@@ -216,7 +232,7 @@ export default function DocumentsPage() {
         <DataTable<Document>
           columns={columns}
           rows={docs}
-          getRowId={(d) => d.id}
+          getRowId={(documentItem) => documentItem.id}
           loading={docsLoading}
           error={tableError}
           emptyMessage="Документов пока нет."

@@ -1,5 +1,6 @@
 // frontend/src/pages/LoginPage.tsx
-import { FormEvent, useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
+import type { FormEvent } from "react";
 import {
   Box,
   Paper,
@@ -18,7 +19,7 @@ import { firstChangePassword, login } from "../services/api";
 
 export default function LoginPage() {
   const { setTokenAndUser } = useAuth();
-  const { notifyError, notifySuccess } = useNotification();
+  const { notifySuccess } = useNotification();
   const navigate = useNavigate();
   const location = useLocation() as any;
 
@@ -42,8 +43,8 @@ export default function LoginPage() {
     emailInputRef.current?.focus();
   }, []);
 
-  const handleLoginSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleLoginSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     setError(null);
 
     if (!email.trim() || !password) {
@@ -56,9 +57,9 @@ export default function LoginPage() {
       const token = await login({ email: email.trim(), password });
       await setTokenAndUser(token.access_token);
       navigate(from, { replace: true });
-    } catch (err: any) {
-      const status = err?.status;
-      const detail = err?.responseData?.detail || err?.message;
+    } catch (error_: any) {
+      const status = error_?.status;
+      const detail = error_?.responseData?.detail || error_?.message;
 
       if (status === 403 && detail === "PASSWORD_CHANGE_REQUIRED") {
         setMustChangePassword(true);
@@ -71,8 +72,8 @@ export default function LoginPage() {
     }
   };
 
-  const handleFirstChangeSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleFirstChangeSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     setError(null);
 
     if (!newPassword || !newPasswordRepeat) {
@@ -99,13 +100,21 @@ export default function LoginPage() {
       await setTokenAndUser(token.access_token);
       notifySuccess("Пароль успешно изменён!");
       navigate(from, { replace: true });
-    } catch (err: any) {
-      const detail = err?.responseData?.detail || err?.message;
+    } catch (error_: any) {
+      const detail = error_?.responseData?.detail || error_?.message;
       setError(detail || "Ошибка смены пароля");
     } finally {
       setLoading(false);
     }
   };
+
+  // Читаемый текст на кнопке без вложенных тернарных операторов
+  let submitLabel = "Войти";
+  if (loading) {
+    submitLabel = "Обработка...";
+  } else if (mustChangePassword) {
+    submitLabel = "Сменить пароль и войти";
+  }
 
   return (
     <Box
@@ -118,7 +127,11 @@ export default function LoginPage() {
         p: 2,
       }}
     >
-      <Paper sx={{ p: 4, width: "100%", maxWidth: 420 }} component="section" aria-label="Форма входа">
+      <Paper
+        sx={{ p: 4, width: "100%", maxWidth: 420 }}
+        component="section"
+        aria-label="Форма входа"
+      >
         <Stack spacing={2}>
           <Stack direction="row" spacing={1.5} alignItems="center" mb={1}>
             <LockOpenIcon color="primary" sx={{ fontSize: 32 }} aria-hidden />
@@ -149,7 +162,7 @@ export default function LoginPage() {
                 label="E-mail (логин)"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 fullWidth
                 autoComplete="username"
                 disabled={mustChangePassword || loading}
@@ -159,9 +172,9 @@ export default function LoginPage() {
                 label={mustChangePassword ? "Временный пароль" : "Пароль"}
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => setPassword(event.target.value)}
                 fullWidth
-                autoComplete={mustChangePassword ? "current-password" : "current-password"}
+                autoComplete="current-password"
                 required
                 disabled={loading}
               />
@@ -172,7 +185,7 @@ export default function LoginPage() {
                     label="Новый пароль (мин. 8 символов)"
                     type="password"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={(event) => setNewPassword(event.target.value)}
                     fullWidth
                     autoComplete="new-password"
                     required
@@ -182,7 +195,9 @@ export default function LoginPage() {
                     label="Подтвердите новый пароль"
                     type="password"
                     value={newPasswordRepeat}
-                    onChange={(e) => setNewPasswordRepeat(e.target.value)}
+                    onChange={(event) =>
+                      setNewPasswordRepeat(event.target.value)
+                    }
                     fullWidth
                     autoComplete="new-password"
                     required
@@ -196,13 +211,11 @@ export default function LoginPage() {
                 variant="contained"
                 size="large"
                 disabled={loading}
-                aria-label={mustChangePassword ? "Сменить пароль и войти" : "Войти"}
+                aria-label={
+                  mustChangePassword ? "Сменить пароль и войти" : "Войти"
+                }
               >
-                {loading
-                  ? "Обработка..."
-                  : mustChangePassword
-                  ? "Сменить пароль и войти"
-                  : "Войти"}
+                {submitLabel}
               </Button>
             </Stack>
           </Box>
