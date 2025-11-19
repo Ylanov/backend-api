@@ -286,8 +286,6 @@ async function createMissingUnitsWithParents(
 ): Promise<void> {
   const { unitsById, unitNameToId } = importMaps;
 
-  // УДАЛЁН БЛОК С existingKeys (он был не нужен)
-
   const pendingUnits = unitPairs.filter(
     (pair) => !unitNameToId.has(normKey(pair.name))
   );
@@ -452,6 +450,40 @@ async function syncTeamsForGroups(
   }
 }
 
+// Функция для выноса логики сбора существующих ключей, чтобы снизить сложность runDryRun
+function buildExistingSetsForDryRun(
+  units: OrganizationUnit[],
+  teams: Team[],
+  pyros: { full_name: string }[],
+  unitsById: Map<number, OrganizationUnit>
+) {
+  const unitKey = (parentName: string | null, name: string) =>
+    createUnitKeyWithParent(parentName, name);
+
+  const existingUnitKeys = new Set<string>();
+  for (const unit of units) {
+    // Исправлено условие с отрицанием (unit.parent_id != null)
+    const parentName =
+      unit.parent_id == null
+        ? null
+        : unitsById.get(unit.parent_id)?.name ?? null;
+    existingUnitKeys.add(unitKey(parentName, unit.name));
+  }
+
+  const existingTeamKeys = new Set<string>();
+  for (const team of teams) {
+    const unitId = team.organization_unit_id ?? 0;
+    existingTeamKeys.add(`${unitId}::${normKey(team.name)}`);
+  }
+
+  const existingPyroNames = new Set<string>();
+  for (const pyro of pyros) {
+    existingPyroNames.add(normKey(pyro.full_name));
+  }
+
+  return { existingUnitKeys, existingTeamKeys, existingPyroNames, unitKey };
+}
+
 // --- Компонент страницы импорта ---
 
 export default function ImportRosterPage() {
@@ -503,11 +535,12 @@ export default function ImportRosterPage() {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      // Удален лишний cast `as any[][]`, так как sheet_to_json<any[]> уже возвращает массив
       const raw = XLSX.utils.sheet_to_json<any[]>(worksheet, {
         header: 1,
         raw: true,
         defval: "",
-      }) as any[][];
+      });
 
       if (!raw || raw.length === 0) {
         setParseError("Файл пуст или не удалось прочитать данные.");
@@ -626,28 +659,13 @@ export default function ImportRosterPage() {
         pyros
       );
 
-      const unitKey = (parentName: string | null, name: string) =>
-        createUnitKeyWithParent(parentName, name);
-
-      const existingUnitKeys = new Set<string>();
-      for (const unit of units) {
-        const parentName =
-          unit.parent_id != null
-            ? unitsById.get(unit.parent_id)?.name ?? null
-            : null;
-        existingUnitKeys.add(unitKey(parentName, unit.name));
-      }
-
-      const existingTeamKeys = new Set<string>();
-      for (const team of teams) {
-        const unitId = team.organization_unit_id ?? 0;
-        existingTeamKeys.add(`${unitId}::${normKey(team.name)}`);
-      }
-
-      const existingPyroNames = new Set<string>();
-      for (const pyro of pyros) {
-        existingPyroNames.add(normKey(pyro.full_name));
-      }
+      // Используем helper для сбора существующих ключей (снижение Complexity)
+      const {
+        existingUnitKeys,
+        existingTeamKeys,
+        existingPyroNames,
+        unitKey
+      } = buildExistingSetsForDryRun(units, teams, pyros, unitsById);
 
       const unitsToCreateSet = new Map<
         string,
