@@ -46,7 +46,7 @@ type TreeProps = {
 // Функция парсинга ID (без изменений)
 function parseNumericId(s: string): { type: string, id: number } | null {
   const match = s.match(/^(unit|team|pyro)-(\d+)$/);
-  return match && match[2] ? { type: match[1], id: parseInt(match[2], 10) } : null;
+  return match && match[2] ? { type: match[1], id: Number.parseInt(match[2], 10) } : null;
 }
 
 // Draggable-компонент для сотрудника (теперь с чекбоксом)

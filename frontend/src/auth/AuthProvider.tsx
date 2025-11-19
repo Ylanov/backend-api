@@ -4,9 +4,11 @@ import {
   useContext,
   useEffect,
   useState,
-  ReactNode,
+  type ReactNode,
+  useMemo,
+  useCallback,
 } from "react";
-import { useLocation, useNavigate, Navigate } from "react-router-dom";
+import { useLocation, Navigate } from "react-router-dom";
 
 import type { Pyrotechnician } from "../types";
 import {
@@ -38,22 +40,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   // --- НОВАЯ ВНУТРЕННЯЯ ФУНКЦИЯ ---
-  // Она будет использоваться и при обычном логине, и при инициализации, и при смене пароля
-  const handleSetToken = async (accessToken: string) => {
-    setAuthToken(accessToken);
-    setToken(accessToken);
-    try {
-      const me = await getMe();
-      setUser(me);
-    } catch (e) {
-      // если токен вдруг оказался невалидным, сбрасываем все
-      setAuthToken(null);
-      setToken(null);
-      setUser(null);
-      notifyError("Сессия истекла или недействительна. Пожалуйста, войдите снова.");
-      throw e; // пробрасываем ошибку дальше, если нужно
-    }
-  };
+  // Оборачиваем в useCallback, чтобы ссылка на функцию была стабильной
+  const handleSetToken = useCallback(
+    async (accessToken: string) => {
+      setAuthToken(accessToken);
+      setToken(accessToken);
+      try {
+        const me = await getMe();
+        setUser(me);
+      } catch (e) {
+        // если токен вдруг оказался невалидным, сбрасываем все
+        setAuthToken(null);
+        setToken(null);
+        setUser(null);
+        notifyError(
+          "Сессия истекла или недействительна. Пожалуйста, войдите снова."
+        );
+        throw e;
+      }
+    },
+    [notifyError]
+  );
   // ---------------------------------
 
   // Инициализация из localStorage
@@ -66,7 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        // Используем новую общую функцию
         await handleSetToken(stored);
       } catch (e) {
         // Ошибка уже обработана внутри handleSetToken
@@ -74,41 +80,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [handleSetToken]);
 
-  const handleLogin = async (payload: LoginRequest) => {
-    // Эта функция остается для обычного логина, но теперь она будет проще
-    const { access_token } = await apiLogin(payload);
-    await handleSetToken(access_token);
-  };
+  // Оборачиваем в useCallback
+  const handleLogin = useCallback(
+    async (payload: LoginRequest) => {
+      const { access_token } = await apiLogin(payload);
+      await handleSetToken(access_token);
+    },
+    [handleSetToken]
+  );
 
-  const handleLogout = () => {
+  // Оборачиваем в useCallback
+  const handleLogout = useCallback(() => {
     setAuthToken(null);
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
-  const value: AuthContextValue = {
-    user,
-    token,
-    loading,
-    // Обернем handleLogin в try/catch, чтобы LoginPage мог ловить ошибки
-    login: async (payload: LoginRequest) => {
-        try {
-            await handleLogin(payload);
-        } catch(e: any) {
-            const msg = e?.responseData?.detail || e?.message || "Не удалось войти";
-            // Не показываем ошибку "PASSWORD_CHANGE_REQUIRED" пользователю
-            if (msg !== "PASSWORD_CHANGE_REQUIRED") {
-              notifyError(msg);
-            }
-            throw e; // Пробрасываем ошибку для LoginPage
+  // Функция-обертка для логина с обработкой ошибок, тоже в useCallback
+  const loginWrapper = useCallback(
+    async (payload: LoginRequest) => {
+      try {
+        await handleLogin(payload);
+      } catch (e: any) {
+        const msg =
+          e?.responseData?.detail || e?.message || "Не удалось войти";
+        // Не показываем ошибку "PASSWORD_CHANGE_REQUIRED" пользователю
+        if (msg !== "PASSWORD_CHANGE_REQUIRED") {
+          notifyError(msg);
         }
+        throw e; // Пробрасываем ошибку для LoginPage
+      }
     },
-    logout: handleLogout,
-    // --- ПРЕДОСТАВЛЯЕМ НОВУЮ ФУНКЦИЮ В КОНТЕКСТ ---
-    setTokenAndUser: handleSetToken,
-  };
+    [handleLogin, notifyError]
+  );
+
+  // ИСПОЛЬЗУЕМ USEMEMO ДЛЯ СОЗДАНИЯ ОБЪЕКТА VALUE
+  const value: AuthContextValue = useMemo(
+    () => ({
+      user,
+      token,
+      loading,
+      login: loginWrapper,
+      logout: handleLogout,
+      setTokenAndUser: handleSetToken,
+    }),
+    [user, token, loading, loginWrapper, handleLogout, handleSetToken]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

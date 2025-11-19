@@ -34,10 +34,10 @@ function toNumericUnitId(src: Props["unit"]): number | null {
   if (typeof src.id === "number") return src.id;
   const s = String(src.id);
   if (s.startsWith("unit-")) {
-    const n = parseInt(s.slice(5), 10);
+    const n = Number.parseInt(s.slice(5), 10);
     return Number.isNaN(n) ? null : n;
   }
-  const n = parseInt(s, 10);
+  const n = Number.parseInt(s, 10);
   return Number.isNaN(n) ? null : n;
 }
 
