@@ -9,26 +9,18 @@ import {
   CircularProgress,
   Typography,
   Paper,
-  TableProps,
 } from "@mui/material";
-import { ReactNode } from "react";
+import type { TableProps } from "@mui/material";
+import type { ReactNode } from "react";
 
 export interface DataTableColumn<T> {
-  /** Уникальный id колонки */
   id: string;
-  /** Заголовок в шапке */
   label: string;
-  /** Как рисовать значение в ячейке */
   render: (row: T) => ReactNode;
-  /** Выравнивание текста */
   align?: "left" | "right" | "center";
-  /** Скрывать колонку на xs */
   hideOnXs?: boolean;
-  /** Скрывать колонку на sm и ниже */
   hideOnSm?: boolean;
-  /** Произвольные sx-стили для ячейки */
   cellSx?: any;
-  /** Произвольные sx-стили для заголовка */
   headerSx?: any;
 }
 
@@ -40,17 +32,10 @@ export interface DataTableProps<T> {
   error?: string | null;
   emptyMessage?: string;
   size?: TableProps["size"];
-  /** Колонок может быть меньше (из-за скрытых), но colspan используем по количеству columns */
   stickyHeader?: boolean;
   onRowClick?: (row: T) => void;
 }
 
-/**
- * Универсальная таблица с обработкой:
- * - загрузки (loading)
- * - пустого результата
- * - ошибки
- */
 export function DataTable<T>({
   columns,
   rows,
@@ -64,6 +49,67 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const colSpan = columns.length || 1;
 
+  /** ─────────────────────────────────────────────
+   *  Вынесенная логика вместо вложенного тернарника
+   *  ─────────────────────────────────────────────*/
+  let content: ReactNode;
+
+  if (loading) {
+    content = (
+      <TableRow>
+        <TableCell colSpan={colSpan} align="center" sx={{ p: 4 }}>
+          <CircularProgress />
+        </TableCell>
+      </TableRow>
+    );
+  } else if (error) {
+    content = (
+      <TableRow>
+        <TableCell colSpan={colSpan} align="center" sx={{ p: 4 }}>
+          <Typography color="error">{error}</Typography>
+        </TableCell>
+      </TableRow>
+    );
+  } else if (rows.length === 0) {
+    content = (
+      <TableRow>
+        <TableCell colSpan={colSpan} align="center" sx={{ p: 4 }}>
+          <Typography color="text.secondary">{emptyMessage}</Typography>
+        </TableCell>
+      </TableRow>
+    );
+  } else {
+    content = rows.map((row) => {
+      const id = getRowId(row);
+      return (
+        <TableRow
+          key={id}
+          hover={!!onRowClick}
+          onClick={onRowClick ? () => onRowClick(row) : undefined}
+          sx={onRowClick ? { cursor: "pointer" } : undefined}
+        >
+          {columns.map((col) => (
+            <TableCell
+              key={col.id}
+              align={col.align}
+              sx={{
+                ...(col.hideOnXs && {
+                  display: { xs: "none", sm: "table-cell" },
+                }),
+                ...(col.hideOnSm && {
+                  display: { xs: "none", md: "table-cell" },
+                }),
+                ...col.cellSx,
+              }}
+            >
+              {col.render(row)}
+            </TableCell>
+          ))}
+        </TableRow>
+      );
+    });
+  }
+
   return (
     <TableContainer component={Paper} variant="outlined">
       <Table size={size} stickyHeader={stickyHeader}>
@@ -75,8 +121,12 @@ export function DataTable<T>({
                 align={col.align}
                 sx={{
                   fontWeight: "bold",
-                  ...(col.hideOnXs && { display: { xs: "none", sm: "table-cell" } }),
-                  ...(col.hideOnSm && { display: { xs: "none", md: "table-cell" } }),
+                  ...(col.hideOnXs && {
+                    display: { xs: "none", sm: "table-cell" },
+                  }),
+                  ...(col.hideOnSm && {
+                    display: { xs: "none", md: "table-cell" },
+                  }),
                   ...col.headerSx,
                 }}
               >
@@ -85,57 +135,8 @@ export function DataTable<T>({
             ))}
           </TableRow>
         </TableHead>
-        <TableBody>
-          {loading ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} align="center" sx={{ p: 4 }}>
-                <CircularProgress />
-              </TableCell>
-            </TableRow>
-          ) : error ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} align="center" sx={{ p: 4 }}>
-                <Typography color="error">{error}</Typography>
-              </TableCell>
-            </TableRow>
-          ) : rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} align="center" sx={{ p: 4 }}>
-                <Typography color="text.secondary">{emptyMessage}</Typography>
-              </TableCell>
-            </TableRow>
-          ) : (
-            rows.map((row) => {
-              const id = getRowId(row);
-              return (
-                <TableRow
-                  key={id}
-                  hover={!!onRowClick}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  sx={onRowClick ? { cursor: "pointer" } : undefined}
-                >
-                  {columns.map((col) => (
-                    <TableCell
-                      key={col.id}
-                      align={col.align}
-                      sx={{
-                        ...(col.hideOnXs && {
-                          display: { xs: "none", sm: "table-cell" },
-                        }),
-                        ...(col.hideOnSm && {
-                          display: { xs: "none", md: "table-cell" },
-                        }),
-                        ...col.cellSx,
-                      }}
-                    >
-                      {col.render(row)}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              );
-            })
-          )}
-        </TableBody>
+
+        <TableBody>{content}</TableBody>
       </Table>
     </TableContainer>
   );
