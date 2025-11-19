@@ -76,6 +76,9 @@ export default function PyrotechnicianDialog({
         email: email.trim() || undefined,
         role: role.trim() || undefined,
         rank: rank.trim() || undefined,
+        // --- ДОБАВЛЕНЫ ЭТИ СТРОКИ ---
+        is_admin: isEditing && pyro ? pyro.is_admin : false, // Сохраняем или ставим false
+        is_active: isEditing && pyro ? pyro.is_active : true, // Сохраняем или ставим true
       };
 
       if (isEditing && pyro) {

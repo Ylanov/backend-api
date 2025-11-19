@@ -33,20 +33,23 @@ export default function PyrotechnicianForm({ onCreate }: Props) {
 
     const payload: PyrotechnicianCreate = {
       full_name: fullName.trim(),
-      phone: phone.trim() ? phone.trim() : undefined,
-      email: email.trim() ? email.trim() : undefined,
+      phone: phone.trim() || undefined, // более компактная запись
+      email: email.trim() || undefined,
+      // Убедитесь, что добавили rating?: number в types.ts
       rating: rating.trim() ? Number(rating) : undefined,
+
+      // Обязательные поля для создания пользователя
+      is_admin: false,
+      is_active: true,
     };
 
     try {
       await onCreate(payload);
-      // Сброс формы в случае успеха
       setFullName("");
       setPhone("");
       setEmail("");
       setRating("");
     } catch {
-      // Ошибку показываем здесь минимально; основная обработка может быть выше
       setError("Не удалось добавить пиротехника");
     } finally {
       setIsSubmitting(false);

@@ -3,7 +3,7 @@ import React, {
   useCallback,
   useContext,
   useState,
-  ReactNode,
+  type ReactNode, // Добавлено ключевое слово type
 } from "react";
 import { Snackbar, Alert } from "@mui/material";
 
@@ -28,7 +28,7 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
 );
 
 type NotificationProviderProps = {
-  children: ReactNode;
+  readonly children: ReactNode; // Рекомендуется также добавить readonly для пропсов
 };
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({
@@ -65,10 +65,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     setState((prev) => ({ ...prev, open: false }));
   }, []);
 
+  // Обернем value в useMemo для оптимизации (хорошая практика)
+  const contextValue = React.useMemo(
+    () => ({ notifySuccess, notifyError, notifyInfo, notifyWarning }),
+    [notifySuccess, notifyError, notifyInfo, notifyWarning]
+  );
+
   return (
-    <NotificationContext.Provider
-      value={{ notifySuccess, notifyError, notifyInfo, notifyWarning }}
-    >
+    <NotificationContext.Provider value={contextValue}>
       {children}
 
       <Snackbar

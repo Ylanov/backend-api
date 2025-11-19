@@ -65,9 +65,12 @@ const NotificationsWidget = memo(function NotificationsWidget(
 ) {
   const { onOpen } = props;
 
+  // ИСПРАВЛЕНИЕ ЗДЕСЬ:
+  // 1. Добавлен дженерик <Notification[]>
+  // 2. queryFn обернут в () => fetchNotifications(), чтобы избежать конфликта типов контекста
   const { data: notifications = [] } = useQuery<Notification[]>({
     queryKey: ["notifications"],
-    queryFn: fetchNotifications,
+    queryFn: () => fetchNotifications(),
     // При необходимости можно включить периодическое обновление:
     // refetchInterval: 30000,
   });

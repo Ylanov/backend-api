@@ -25,7 +25,8 @@ import DeleteIcon from "@mui/icons-material/Delete";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-import type { Task } from "../types";
+// Импортируем типы Team и Zone, чтобы использовать их в дженериках
+import type { Task, Team, Zone } from "../types";
 import { TaskStatus, TaskPriority } from "../types";
 import { fetchTasks, deleteTask, fetchTeams, fetchZones } from "../services/api";
 import TaskDialog from "../components/TaskDialog";
@@ -54,24 +55,26 @@ export default function TasksPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
 
+  // ИСПРАВЛЕНИЕ 1: Добавлен дженерик <Task[]> и queryFn обернут в стрелочную функцию
   const {
     data: tasks,
     isLoading: isLoadingTasks,
     error: tasksError,
-  } = useQuery({
+  } = useQuery<Task[]>({
     queryKey: ["tasks"],
-    queryFn: fetchTasks,
+    queryFn: () => fetchTasks(),
   });
 
-  // Эти запросы нужны для TaskDialog
-  const { data: teams = [], isLoading: isLoadingTeams } = useQuery({
+  // ИСПРАВЛЕНИЕ 2: Добавлен дженерик <Team[]> и queryFn обернут в стрелочную функцию
+  const { data: teams = [], isLoading: isLoadingTeams } = useQuery<Team[]>({
     queryKey: ["teams"],
-    queryFn: fetchTeams,
+    queryFn: () => fetchTeams(),
   });
 
-  const { data: zones = [], isLoading: isLoadingZones } = useQuery({
+  // ИСПРАВЛЕНИЕ 3: Добавлен дженерик <Zone[]> и queryFn обернут в стрелочную функцию
+  const { data: zones = [], isLoading: isLoadingZones } = useQuery<Zone[]>({
     queryKey: ["zones"],
-    queryFn: fetchZones,
+    queryFn: () => fetchZones(),
   });
 
   const deleteMutation = useMutation({

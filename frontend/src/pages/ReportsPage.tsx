@@ -1,5 +1,5 @@
 // frontend/src/pages/ReportsPage.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Добавлен useEffect
 import {
   Box,
   Paper,
@@ -112,28 +112,34 @@ export default function ReportsPage() {
     isLoading: isLoadingTeams,
     isError: isTeamsError,
     error: teamsError,
-  } = useQuery({
+  } = useQuery<Team[]>({
     queryKey: ["teams"],
-    queryFn: fetchTeams,
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось загрузить список команд.";
-      notifyError(msg);
-    },
+    queryFn: () => fetchTeams(),
   });
+
+  // Обработка ошибок teams через эффект
+  useEffect(() => {
+    if (isTeamsError && teamsError) {
+      notifyError(teamsError.message || "Не удалось загрузить список команд.");
+    }
+  }, [isTeamsError, teamsError, notifyError]);
 
   const {
     data: zones = [],
     isLoading: isLoadingZones,
     isError: isZonesError,
     error: zonesError,
-  } = useQuery({
+  } = useQuery<Zone[]>({
     queryKey: ["zones"],
-    queryFn: fetchZones,
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось загрузить список зон.";
-      notifyError(msg);
-    },
+    queryFn: () => fetchZones(),
   });
+
+  // Обработка ошибок zones через эффект
+  useEffect(() => {
+    if (isZonesError && zonesError) {
+      notifyError(zonesError.message || "Не удалось загрузить список зон.");
+    }
+  }, [isZonesError, zonesError, notifyError]);
 
   // --- сам отчет по задачам через React Query ---
 
@@ -143,14 +149,18 @@ export default function ReportsPage() {
     isFetching: isFetchingReport,
     isError: isReportError,
     error: reportError,
-  } = useQuery<Task[], any>({
+  } = useQuery<Task[]>({
     queryKey: ["tasks-report", currentFilters],
-    queryFn: ({ signal }) => fetchTasksReport(currentFilters, signal),
-    onError: (e: any) => {
-      const msg = e?.message || "Не удалось загрузить отчет.";
-      notifyError(msg);
-    },
+    // Явно указываем, что мы деструктурируем signal из объекта
+    queryFn: ({ signal }: { signal: AbortSignal }) => fetchTasksReport(currentFilters, signal),
   });
+
+  // Обработка ошибок report через эффект
+  useEffect(() => {
+    if (isReportError && reportError) {
+      notifyError(reportError.message || "Не удалось загрузить отчет.");
+    }
+  }, [isReportError, reportError, notifyError]);
 
   const loading = isLoadingReport || isFetchingReport;
   const filtersLoading = isLoadingTeams || isLoadingZones;
@@ -266,7 +276,9 @@ export default function ReportsPage() {
             new DocxTableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: "Дата создания", bold: true })],
+                  children: [
+                    new TextRun({ text: "Дата создания", bold: true }),
+                  ],
                 }),
               ],
             }),
@@ -317,7 +329,11 @@ export default function ReportsPage() {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: "Отчет по задачам", bold: true, size: 32 }),
+                  new TextRun({
+                    text: "Отчет по задачам",
+                    bold: true,
+                    size: 32,
+                  }),
                 ],
               }),
               new Paragraph({
@@ -330,7 +346,9 @@ export default function ReportsPage() {
               }),
               new Paragraph({}),
               new Paragraph({
-                children: [new TextRun({ text: "Фильтры:", bold: true, size: 24 })],
+                children: [
+                  new TextRun({ text: "Фильтры:", bold: true, size: 24 }),
+                ],
               }),
               ...filterLines.map(
                 (line) =>

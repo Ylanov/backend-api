@@ -113,10 +113,11 @@ export default function TaskDetailPage() {
   const handlePickFiles = () => fileInputRef.current?.click();
 
   const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
+    const files = event.target.files; // Сохраняем в переменную для корректного сужения типа
+    if (files) {
       setFiles((previous) => [
         ...previous,
-        ...Array.from(event.target.files),
+        ...Array.from(files),
       ]);
     }
     event.target.value = "";

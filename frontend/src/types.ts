@@ -29,11 +29,12 @@ export type Pyrotechnician = {
   email?: string | null;
   role?: string | null;
   rank?: string | null;
+  rating?: number | null; // <--- ДОБАВЛЕНО ПОЛЕ RATING
   is_admin: boolean;
   is_active: boolean;
   last_login_at?: string | null;
   login_count: number;
-  must_change_password: boolean; // <-- НОВОЕ ПОЛЕ
+  must_change_password: boolean;
 };
 
 export type PyrotechnicianCreate = Omit<Pyrotechnician, "id" | "last_login_at" | "login_count" | "must_change_password">;

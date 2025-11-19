@@ -78,15 +78,18 @@ export default function ZonesPage() {
   const [selectedZoneId, setSelectedZoneId] = useState<number | null>(null);
   const [search, setSearch] = useState<string>("");
 
+  // ИСПРАВЛЕНИЕ:
+  // 1. Добавлен дженерик <Zone[]>
+  // 2. queryFn обернут в стрелочную функцию () => fetchZones()
+  // 3. Убрано initialData из опций (оставлено дефолтное значение = [] при деструктуризации)
   const {
     data: zones = [],
     isLoading,
     error,
     refetch,
-  } = useQuery({
+  } = useQuery<Zone[]>({
     queryKey: ["zones"],
-    queryFn: fetchZones,
-    initialData: [],
+    queryFn: () => fetchZones(),
   });
 
   useEffect(() => {

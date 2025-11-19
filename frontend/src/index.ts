@@ -3,5 +3,3 @@
 
 export * from "./notifications/NotificationProvider";
 export { default as App } from "./App";
-import { AuthProvider } from "./auth/AuthProvider";
-import { NotificationProvider } from "./notifications/NotificationProvider";

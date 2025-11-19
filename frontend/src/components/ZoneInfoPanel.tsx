@@ -1,9 +1,10 @@
 // components/ZoneInfoPanel.tsx
 import { useEffect, useState } from "react";
-import { Box, Typography, CircularProgress, Alert, Stack, Divider, Link } from "@mui/material";
+// Убрали неиспользуемый импорт Box
+import { Typography, CircularProgress, Alert, Stack, Divider, Link } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
-import { fetchZoneDetails } from "../services/api"; // Вам нужно будет добавить эту функцию в api.ts
-import type { ZoneWithTasks } from "../types"; // И этот тип тоже
+import { fetchZoneDetails } from "../services/api";
+import type { ZoneWithTasks } from "../types";
 
 type Props = { zoneId: number; };
 
@@ -17,7 +18,11 @@ export default function ZoneInfoPanel({ zoneId }: Props) {
             setLoading(true);
             setError(null);
             try {
-                const data = await fetchZoneDetails(zoneId); // Вызываем API
+                // ИСПРАВЛЕНИЕ TS2559:
+                // Функция fetchZoneDetails ожидает объект контекста (QueryKey), а не число.
+                // Мы эмулируем структуру { queryKey: [...] } и приводим к as any,
+                // чтобы удовлетворить TypeScript при ручном вызове.
+                const data = await fetchZoneDetails({ queryKey: ['zoneDetails', zoneId] } as any);
                 setZone(data);
             } catch (e: any) {
                 setError(e.message || "Не удалось загрузить данные.");

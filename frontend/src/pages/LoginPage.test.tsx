@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import LoginPage from "./LoginPage";
-import { renderWithProviders } from "@/test-utils";
-
+import { renderWithProviders } from "../test-utils";
+import { test, expect } from "vitest";
 test("renders email and password fields", () => {
   render(renderWithProviders(<LoginPage />));
 

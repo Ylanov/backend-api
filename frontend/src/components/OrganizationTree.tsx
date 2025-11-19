@@ -101,7 +101,6 @@ function DraggablePyroInTree({ node, onEdit, onDelete, isSelected, onToggleSelec
 }
 
 // --- НОВЫЙ КОМПОНЕНТ: Узел дерева (Unit или Team) ---
-// Вынос этого компонента решает проблему вызова хуков useState и useDroppable внутри цикла
 type OrganizationTreeNodeProps = {
   node: OrganizationNode;
   level: number;
@@ -121,16 +120,22 @@ type OrganizationTreeNodeProps = {
 function OrganizationTreeNode(props: OrganizationTreeNodeProps) {
   const { node, level, isOpen, onToggle, isSelected, childrenNodes } = props;
 
-  // 1. Хук useState теперь легален
   const [hover, setHover] = useState(false);
 
+  // 1. Сначала парсим ID
   const parsedId = parseNumericId(node.id);
-  if (!parsedId) return null;
-  const { id, type } = parsedId;
-  const hasChildren = node.children && node.children.length > 0;
 
-  // 2. Хук useDroppable теперь легален (вызывается на верхнем уровне компонента, а не в цикле)
+  // 2. Подготавливаем данные для хука (fallback значения, если parsedId null)
+  const type = parsedId ? parsedId.type : 'unknown';
+  const id = parsedId ? parsedId.id : 0;
+
+  // 3. Вызываем хук БЕЗУСЛОВНО (до return)
   const { isOver, setNodeRef } = useDroppable({ id: node.id, data: { type, id } });
+
+  // 4. Теперь можно делать проверки и return, так как все хуки уже вызваны
+  if (!parsedId) return null;
+
+  const hasChildren = node.children && node.children.length > 0;
 
   return (
     <Fragment>
@@ -228,8 +233,6 @@ export default function OrganizationTree(props: TreeProps) {
       }
 
       // --- Отрисовка УЗЛА-КОМАНДЫ или УЗЛА-ПОДРАЗДЕЛЕНИЯ ---
-      // Используем новый компонент OrganizationTreeNode.
-      // Теперь хуки вызываются внутри него, а не здесь (в цикле map).
       return (
         <OrganizationTreeNode
           key={node.id}
