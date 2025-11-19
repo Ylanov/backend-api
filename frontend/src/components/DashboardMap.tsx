@@ -4,10 +4,10 @@ import { loadYMaps } from "../lib/ymaps";
 import type { Zone, Task, TaskPriority } from "../types";
 
 type Props = {
-  zones: Zone[];
-  tasks: Task[];
-  center?: [number, number];
-  zoom?: number;
+  readonly zones: Zone[];
+  readonly tasks: Task[];
+  readonly center?: [number, number];
+  readonly zoom?: number;
 };
 
 const KEY = import.meta.env.VITE_YMAPS_API_KEY as string | undefined;

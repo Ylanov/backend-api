@@ -112,12 +112,9 @@ export default function CreateTeamDialog({
   const normalizedExistingByUnit = useMemo(() => {
     const map = new Map<number | "no-unit", Set<string>>();
     for (const team of teams) {
-      const unitKey = (team.organization_unit_id ?? "no-unit") as
-        | number
-        | "no-unit";
-      const set =
-        map.get(unitKey) ??
-        new Set<string>();
+      // Исправление 1: убрано лишнее приведение типа `as number | "no-unit"`
+      const unitKey = team.organization_unit_id ?? "no-unit";
+      const set = map.get(unitKey) ?? new Set<string>();
       set.add(normalizeLight(team.name));
       map.set(unitKey, set);
     }
@@ -342,7 +339,8 @@ export default function CreateTeamDialog({
                 <MenuItem value="">
                   <em>Без подразделения</em>
                 </MenuItem>
-                {allUnits!.map((unit) => (
+                {/* Исправление 2: allUnits! заменено на allUnits? */}
+                {allUnits?.map((unit) => (
                   <MenuItem key={unit.id} value={unit.id}>
                     {unit.name}
                   </MenuItem>
