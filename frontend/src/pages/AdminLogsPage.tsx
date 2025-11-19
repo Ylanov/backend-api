@@ -147,7 +147,7 @@ export default function AdminLogsPage() {
     }
   }, [loginQuery.isError, loginQuery.error, notifyError]);
 
-  const loginEvents = (loginQuery.data ?? []) as LoginEvent[];
+  const loginEvents: LoginEvent[] = loginQuery.data ?? [];
   const isLoginInitialLoading = loginQuery.isLoading;
   const isLoginFetching = loginQuery.isFetching;
   const isLoginError = loginQuery.isError;
@@ -180,7 +180,7 @@ export default function AdminLogsPage() {
     }
   }, [auditQuery.isError, auditQuery.error, notifyError]);
 
-  const auditLogs = (auditQuery.data ?? []) as AuditLogEntry[];
+  const auditLogs: AuditLogEntry[] = auditQuery.data ?? [];
   const isAuditInitialLoading = auditQuery.isLoading;
   const isAuditFetching = auditQuery.isFetching;
   const isAuditError = auditQuery.isError;

@@ -1,11 +1,27 @@
-import React, { createContext, useContext } from "react";
+// frontend-ui/src/__mocks__/NotificationProviderMock.tsx
+import { createContext, useContext } from "react";
 
-export const NotificationContext = createContext({
-  notify: () => {},
-});
+type NotificationContextType = {
+  notify: () => void;
+};
 
-export const NotificationProvider = ({ children }: any) => (
-  <NotificationContext.Provider value={{ notify: () => {} }}>
+// Стабильный noop и объект по умолчанию
+const noop = () => {};
+const defaultValue: NotificationContextType = {
+  notify: noop,
+};
+
+export const NotificationContext =
+  createContext<NotificationContextType>(defaultValue);
+
+type NotificationProviderProps = {
+  children?: any;
+};
+
+export const NotificationProvider = ({ children }: NotificationProviderProps) => (
+  // value — один и тот же объект на всех рендерах,
+  // так что правило S6481 выполняется.
+  <NotificationContext.Provider value={defaultValue}>
     {children}
   </NotificationContext.Provider>
 );
