@@ -1,5 +1,5 @@
 // frontend/src/pages/DocumentsPage.tsx
-import { useRef } from "react"; // Убрали useState
+import { useRef } from "react";
 import {
   Box,
   Paper,
@@ -15,6 +15,7 @@ import {
   Tooltip,
   CircularProgress,
   Alert,
+  AlertTitle,
   Stack,
   Link,
 } from "@mui/material";
@@ -22,6 +23,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -49,10 +51,9 @@ export default function DocumentsPage() {
 
   // --- Мутация загрузки файла ---
   const uploadMutation = useMutation({
-    // ИСПРАВЛЕНИЕ TS2345: Передаем объект { file: ... }, так как этого требует DocumentUploadPayload
     mutationFn: (file: File) => uploadDocument({ file }),
     onSuccess: () => {
-      notifySuccess("Файл успешно загружен");
+      notifySuccess("Файл успешно загружен и отправлен на индексацию");
       // Обновляем список
       void queryClient.invalidateQueries({ queryKey: ["documents"] });
 
@@ -120,6 +121,14 @@ export default function DocumentsPage() {
           </>
         }
       />
+
+      {/* --- Блок информации про AI --- */}
+      <Alert severity="info" icon={<AutoAwesomeIcon />} sx={{ mb: 3, borderRadius: 2 }}>
+        <AlertTitle>Умная База Знаний</AlertTitle>
+        Загруженные документы (PDF, DOCX) автоматически анализируются искусственным интеллектом.
+        <br />
+        После загрузки вы можете использовать <strong>Ассистента</strong> (кнопка справа внизу), чтобы быстро находить ответы на вопросы по регламентам.
+      </Alert>
 
       {isError && (
         <Alert severity="error" sx={{ mb: 2 }}>

@@ -41,6 +41,7 @@ import AdminLogsPage from "./pages/AdminLogsPage";
 import { RequireAuth, useAuth } from "./auth/AuthProvider";
 import Sidebar from "./components/Sidebar";
 import NotificationsPopover from "./components/NotificationsPopover";
+import AssistantChat from "./components/AssistantChat"; // <-- НОВЫЙ ИМПОРТ
 
 import { useQuery } from "@tanstack/react-query";
 import { fetchNotifications } from "./services/api";
@@ -65,9 +66,6 @@ const NotificationsWidget = memo(function NotificationsWidget(
 ) {
   const { onOpen } = props;
 
-  // ИСПРАВЛЕНИЕ ЗДЕСЬ:
-  // 1. Добавлен дженерик <Notification[]>
-  // 2. queryFn обернут в () => fetchNotifications(), чтобы избежать конфликта типов контекста
   const { data: notifications = [] } = useQuery<Notification[]>({
     queryKey: ["notifications"],
     queryFn: () => fetchNotifications(),
@@ -377,6 +375,9 @@ export default function App() {
             }
           />
         </Routes>
+
+        {/* Плавающий виджет чата AI-ассистента (доступен только авторизованным) */}
+        {user && <AssistantChat />}
       </Box>
 
       {/* Popover уведомлений */}

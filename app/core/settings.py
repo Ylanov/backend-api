@@ -36,6 +36,21 @@ class Settings(BaseSettings):
         env="CORS_ALLOW_HEADERS",
     )
 
+    # --- НОВЫЕ НАСТРОЙКИ ДЛЯ AI (GigaChat + RAG) ---
+
+    # Ключ авторизации GigaChat (мы передаем его через Secret в k8s или .env локально)
+    GIGACHAT_CREDENTIALS: str = Field(..., env="GIGACHAT_CREDENTIALS")
+
+    # Отключение проверки SSL (нужно для GigaChat в некоторых контурах)
+    GIGACHAT_VERIFY_SSL: bool = Field(False, env="GIGACHAT_VERIFY_SSL")
+
+    # Область видимости: "GIGACHAT_API_PERS" (для физлиц) или "GIGACHAT_API_CORP" (для бизнеса)
+    GIGACHAT_SCOPE: str = Field("GIGACHAT_API_PERS", env="GIGACHAT_SCOPE")
+
+    # Название модели для эмбеддингов (локальная модель HuggingFace)
+    # Она скачается сама при первом запуске в /tmp или кэш
+    EMBEDDING_MODEL_NAME: str = Field("intfloat/multilingual-e5-large", env="EMBEDDING_MODEL_NAME")
+
     @field_validator(
         "BACKEND_CORS_ORIGINS",
         "CORS_ALLOW_METHODS",
@@ -69,6 +84,8 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # Позволяет игнорировать лишние переменные в .env файле, чтобы не падало с ошибкой
+        extra = "ignore"
 
 
 settings = Settings()

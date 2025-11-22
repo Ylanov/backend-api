@@ -7,6 +7,14 @@ metadata:
     app: pyro-api
 spec:
   replicas: 2
+
+  # --- ВАЖНОЕ ДОБАВЛЕНИЕ ---
+  # Recreate убивает старые поды перед созданием новых.
+  # Это предотвращает переполнение памяти (OOM) при обновлении.
+  strategy:
+    type: Recreate
+  # -------------------------
+
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -29,7 +37,8 @@ spec:
 
       containers:
         - name: pyro-api
-          image: ghcr.io/ylanov/pyro-api:2.0.634
+          # Используем версию с библиотеками AI
+          image: ghcr.io/ylanov/pyro-api:2.0.702
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -46,6 +55,7 @@ spec:
                 name: pyro-api-env-secrets
 
           env:
+            # --- СУЩЕСТВУЮЩИЕ ПЕРЕМЕННЫЕ ---
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
@@ -81,9 +91,32 @@ spec:
             - name: DATABASE_URL
               value: "postgresql+asyncpg://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
 
+            # --- ПЕРЕМЕННЫЕ ДЛЯ GIGACHAT ---
+            - name: GIGACHAT_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: gigachat-secrets
+                  key: GIGACHAT_CREDENTIALS
+            - name: GIGACHAT_VERIFY_SSL
+              valueFrom:
+                secretKeyRef:
+                  name: gigachat-secrets
+                  key: GIGACHAT_VERIFY_SSL
+
+            # --- ПЕРЕМЕННЫЕ ДЛЯ КЭША МОДЕЛЕЙ (в /tmp) ---
+            - name: HF_HOME
+              value: "/tmp/huggingface"
+            - name: SENTENCE_TRANSFORMERS_HOME
+              value: "/tmp/sentence_transformers"
+            - name: TORCH_HOME
+              value: "/tmp/torch"
+
           volumeMounts:
             - name: uploads-storage
               mountPath: /uploads
+            # Монтируем временную папку для записи моделей
+            - name: tmp-storage
+              mountPath: /tmp
 
           readinessProbe:
             httpGet:
@@ -98,22 +131,26 @@ spec:
             httpGet:
               path: /api/healthz
               port: 8000
-            initialDelaySeconds: 20
+            # 15 минут на скачивание и старт модели
+            initialDelaySeconds: 1500
             periodSeconds: 10
-            timeoutSeconds: 2
+            timeoutSeconds: 5
             failureThreshold: 3
 
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
+              cpu: "500m"
+              memory: "1Gi"
             limits:
-              cpu: "1"
-              memory: "512Mi"
+              cpu: "2"
+              # 4GB памяти для работы AI
+              memory: "4Gi"
 
       volumes:
         - name: uploads-storage
           persistentVolumeClaim:
             claimName: pyro-uploads-pvc
+        - name: tmp-storage
+          emptyDir: {}
 
       restartPolicy: Always

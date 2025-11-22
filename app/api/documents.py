@@ -1,3 +1,4 @@
+# app/api/documents.py
 from __future__ import annotations
 
 import uuid
@@ -6,15 +7,18 @@ from pathlib import Path
 from typing import List, Optional
 
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
-from app.database import get_db
+from app.database import get_db, SessionLocal # Импортируем SessionLocal для фоновых задач
 from app.models import Document
 from app.schemas import Document as DocumentOut
+
+# Импортируем функцию обработки RAG
+from app.services.rag import process_document
 
 router = APIRouter(
     prefix="/documents",
@@ -26,11 +30,23 @@ ALLOWED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".pdf",
     ".doc", ".docx", ".xls", ".xlsx"
 }
+# Для RAG мы умеем читать только текст
+RAG_EXTENSIONS = {".pdf", ".doc", ".docx"}
+
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Папка для файлов
 UPLOAD_DIR = settings.UPLOAD_DIR
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# --- Вспомогательная функция для фона ---
+async def run_processing_bg(file_path: str, doc_id: int):
+    """
+    Создает новую сессию БД и запускает обработку документа.
+    """
+    async with SessionLocal() as db:
+        await process_document(db, file_path, doc_id)
 
 
 # -------------------------------
@@ -50,6 +66,7 @@ async def list_documents(
 # -------------------------------
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
+    background_tasks: BackgroundTasks, # <-- Добавлено для фона
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
@@ -119,6 +136,12 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
+    # --- ЗАПУСК RAG ИНДЕКСАЦИИ ---
+    # Если файл текстовый (pdf/doc), отправляем на индексацию
+    if file_ext in RAG_EXTENSIONS:
+        background_tasks.add_task(run_processing_bg, str(save_path), doc.id)
+    # -----------------------------
+
     return doc
 
 
@@ -164,6 +187,8 @@ async def delete_document(
         except Exception as e:
             print(f"ERROR: could not delete file {file_path}: {e}")
 
+    # Postgres CASCADE (который мы настроили в models.py)
+    # автоматически удалит все vector-чанки, связанные с этим документом.
     await db.delete(doc)
     await db.commit()
     return None

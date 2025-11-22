@@ -215,3 +215,21 @@ export type DashboardStats = {
   tasks_in_progress: number;
   free_teams: number;
 };
+// --- RAG Assistant ---
+export type SourceItem = {
+  title: string;
+  doc_id: number;
+};
+
+export type AssistantResponse = {
+  answer: string;
+  sources: SourceItem[];
+};
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  sources?: SourceItem[];
+  createdAt: Date;
+};

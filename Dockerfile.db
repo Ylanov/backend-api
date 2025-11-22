@@ -1,0 +1,13 @@
+# Базовый образ CNPG PostgreSQL 16
+FROM ghcr.io/cloudnative-pg/postgresql:16
+
+# Переключаемся во временного root (CNPG использует UID 26 для postgres)
+USER root
+
+# Устанавливаем pgvector
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends postgresql-16-pgvector && \
+    rm -rf /var/lib/apt/lists/*
+
+# Возвращаем пользователя postgres (UID 26 — стандарт CNPG)
+USER 26

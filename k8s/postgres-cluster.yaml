@@ -7,9 +7,12 @@ spec:
   # 3 инстанса: 1 primary + 2 replicas (авто-failover)
   instances: 3
 
-  # Образ с PostGIS
-  imageName: ghcr.io/cloudnative-pg/postgis:16
-
+  # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+  # Специальный образ для CNPG с уже установленным pgvector
+  imageName: ghcr.io/ylanov/pyro-db:16
+  # -------------------------
+  imagePullSecrets:
+      - name: ghcr-creds
   # -------- Хранилище данных --------
   storage:
     size: 25Gi

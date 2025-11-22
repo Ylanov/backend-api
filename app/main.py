@@ -27,6 +27,7 @@ from app.api import notifications as notifications_api
 from app.api import comments as comments_api
 from app.api import reports as reports_api
 from app.api import logs as logs_api
+from app.api import assistant as assistant_api
 
 UPLOAD_DIR = settings.UPLOAD_DIR
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -68,7 +69,7 @@ api_router.include_router(notifications_api.router)
 api_router.include_router(comments_api.router)
 api_router.include_router(reports_api.router)
 api_router.include_router(logs_api.router)
-
+api_router.include_router(assistant_api.router)
 
 # --- Системные эндпоинты ---
 @api_router.get("/healthz")

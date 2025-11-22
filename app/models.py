@@ -12,9 +12,12 @@ from sqlalchemy import (
     DateTime,
     Boolean,
     Index,
+    Computed,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from pgvector.sqlalchemy import Vector
 
 # Берём Base из единого модуля database.py
 from .database import Base
@@ -422,3 +425,44 @@ class AuditLog(Base):
     )
 
     user = relationship("Pyrotechnician", lazy="selectin")
+
+
+# --- МОДЕЛИ ДЛЯ RAG (AI ПОИСК) ---
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(
+        Integer,
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+
+    # Вектор (1024 соответствует модели intfloat/multilingual-e5-large)
+    embedding = Column(Vector(1024))
+
+    # Поле для полнотекстового поиска (TSVECTOR)
+    search_vector = Column(
+        TSVECTOR,
+        Computed("to_tsvector('russian', content)", persisted=True)
+    )
+
+    __table_args__ = (
+        # Индекс HNSW для быстрого векторного поиска
+        Index(
+            'ix_document_chunks_embedding',
+            embedding,
+            postgresql_using='hnsw',
+            postgresql_with={'m': 16, 'ef_construction': 64},
+            postgresql_ops={'embedding': 'vector_cosine_ops'}
+        ),
+        # Индекс GIN для поиска по ключевым словам
+        Index(
+            'ix_document_chunks_search_vector',
+            search_vector,
+            postgresql_using='gin'
+        ),
+    )

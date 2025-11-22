@@ -27,7 +27,8 @@ import type {
   AdminSetPasswordResponse,
   FirstPasswordChangeRequest,
   Token,
-  DashboardStats, // <--- ДОБАВЛЕН ИМПОРТ
+  DashboardStats,
+  AssistantResponse,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -394,3 +395,13 @@ export const fetchDashboardStats = ({ signal }: QueryFnContext = {}) =>
 export function isCanceled(e: any): boolean {
   return e?.name === "AbortError";
 }
+// --- RAG Assistant ---
+
+export const askAssistant = (question: string) =>
+  request<AssistantResponse>(`${BASE_URL}/assistant/ask`, {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
+
+export const getDocumentDownloadUrl = (docId: number) =>
+  `${BASE_URL}/documents/${docId}/download`;
