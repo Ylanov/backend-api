@@ -27,6 +27,11 @@ jobs:
       SECRET_KEY: test-secret-key-for-ci-only
       ACCESS_TOKEN_EXPIRE_MINUTES: "480"
       UPLOAD_DIR: ./uploads-ci
+      # --- ДОБАВЛЕНО: Обязательная переменная для RAG/GigaChat ---
+      # Для CI/CD тестов используем заглушку, так как реальные запросы к API
+      # в юнит-тестах должны мокаться (mock), либо не выполняться.
+      GIGACHAT_CREDENTIALS: "dummy_value_for_ci_tests"
+      # -----------------------------------------------------------
 
     steps:
       - name: Checkout
