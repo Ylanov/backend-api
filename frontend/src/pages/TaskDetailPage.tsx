@@ -75,7 +75,14 @@ export default function TaskDetailPage() {
     error,
   }: UseQueryResult<Task, Error> = useQuery<Task, Error>({
     queryKey: ["task", taskId] as const,
-    queryFn: () => fetchTaskById,
+
+    // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+    // Используем стрелочную функцию для явной передачи параметров.
+    // Это решает конфликт типов между 'unknown[]' (от React Query)
+    // и '(string | number)[]' (в вашем api.ts).
+    queryFn: ({ signal }) => fetchTaskById({ signal, queryKey: ["task", taskId] }),
+    // ------------------------
+
     enabled: !Number.isNaN(taskId),
   });
 
@@ -98,13 +105,11 @@ export default function TaskDetailPage() {
     },
   });
 
-  // ИСПРАВЛЕНИЕ: Добавлена проверка Array.isArray, чтобы избежать ошибки "not iterable"
   const orderedComments = useMemo<TaskComment[]>(() => {
-    // Если task.comments null, undefined или (важно!) не массив — возвращаем пустой список
+    // Дополнительная защита от ошибок рендеринга, если API вернет null вместо массива
     if (!task?.comments || !Array.isArray(task.comments)) {
       return [];
     }
-    // Теперь безопасно использовать spread оператор
     return [...task.comments].sort(
       (first, second) =>
         new Date(first.created_at).getTime() -
