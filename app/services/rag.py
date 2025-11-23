@@ -1,6 +1,6 @@
 # app/services/rag.py
 import logging
-import os
+import itertools
 from typing import List
 
 # Библиотеки для AI и RAG
@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_huggingface import HuggingFaceEmbeddings
 
 # Работа с БД
-from sqlalchemy import select
+from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
@@ -21,41 +21,35 @@ logger = logging.getLogger(__name__)
 
 # --- ИНИЦИАЛИЗАЦИЯ МОДЕЛЕЙ ---
 
-# 1. Локальная модель для векторов (HuggingFace)
 logger.info("Loading embedding model...")
 embeddings_model = HuggingFaceEmbeddings(
     model_name=settings.EMBEDDING_MODEL_NAME,
-    # encode_kwargs={'normalize_embeddings': True} # E5 уже нормализует, но можно оставить true
+    encode_kwargs={'normalize_embeddings': True}
 )
 logger.info("Embedding model loaded.")
 
-# 2. Клиент GigaChat
 chat = GigaChat(
     credentials=settings.GIGACHAT_CREDENTIALS,
     verify_ssl_certs=settings.GIGACHAT_VERIFY_SSL,
     scope=settings.GIGACHAT_SCOPE,
     model="GigaChat",
-    temperature=0.1,  # Минимум фантазии, максимум фактов
+    temperature=0.1,
 )
 
 
 # --- ФУНКЦИИ ---
 
 def get_embedding_sync(text: str) -> List[float]:
-    """
-    Синхронная генерация вектора.
-    """
+    """Синхронная генерация вектора."""
     return embeddings_model.embed_query(text)
 
 
 async def process_document(db: AsyncSession, file_path: str, doc_id: int) -> None:
-    """
-    Основная функция индексации.
-    """
+    """Основная функция индексации документа."""
     logger.info(f"Started RAG processing for doc_id={doc_id} path={file_path}")
 
     try:
-        # 1. Загрузка текста
+        # 1. Загрузка
         if str(file_path).lower().endswith(".pdf"):
             loader = PyPDFLoader(str(file_path))
         else:
@@ -63,20 +57,17 @@ async def process_document(db: AsyncSession, file_path: str, doc_id: int) -> Non
 
         raw_docs = loader.load()
 
-        # --- ПРОВЕРКА НА ПУСТОЙ ФАЙЛ (ИЛИ СКАН) ---
         if not raw_docs:
-            logger.warning(f"Document {doc_id} is empty or could not be parsed.")
+            logger.warning(f"Document {doc_id} is empty.")
             return
 
-        # Логируем начало текста, чтобы убедиться, что это не пустой скан
+        # Проверка на скан (пустой текст)
         preview_text = raw_docs[0].page_content[:500].replace('\n', ' ')
-        logger.info(f"DEBUG PDF CONTENT (First 500 chars): {preview_text}")
-
+        logger.info(f"DEBUG PDF CONTENT: {preview_text}")
         if not preview_text.strip():
-            logger.error(f"Document {doc_id} seems to have empty text. It might be a scanned image.")
-        # ------------------------------------------
+            logger.error(f"Document {doc_id} seems to be a scanned image (empty text).")
 
-        # 2. Нарезка на чанки
+        # 2. Нарезка
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
@@ -84,9 +75,9 @@ async def process_document(db: AsyncSession, file_path: str, doc_id: int) -> Non
         )
         chunks = text_splitter.split_documents(raw_docs)
 
-        logger.info(f"Document {doc_id} split into {len(chunks)} chunks. Generating embeddings...")
+        logger.info(f"Document {doc_id} split into {len(chunks)} chunks.")
 
-        # 3. Генерация векторов и сохранение
+        # 3. Векторизация и сохранение
         new_chunks = []
         for i, chunk in enumerate(chunks):
             text_content = chunk.page_content
@@ -95,9 +86,6 @@ async def process_document(db: AsyncSession, file_path: str, doc_id: int) -> Non
             if not clean_text.strip():
                 continue
 
-            # Генерируем вектор
-            # Примечание: Для E5 при индексации обычно префикс не нужен (или 'passage: '),
-            # но langchain-huggingface делает это стандартно.
             vector = get_embedding_sync(clean_text)
 
             db_chunk = DocumentChunk(
@@ -112,7 +100,7 @@ async def process_document(db: AsyncSession, file_path: str, doc_id: int) -> Non
             db.add_all(new_chunks)
             await db.commit()
 
-        logger.info(f"Document {doc_id} successfully indexed with {len(new_chunks)} vectors.")
+        logger.info(f"Document {doc_id} successfully indexed.")
 
     except Exception as e:
         logger.exception(f"Error processing document {doc_id}: {e}")
@@ -120,30 +108,64 @@ async def process_document(db: AsyncSession, file_path: str, doc_id: int) -> Non
 
 async def search_related_chunks(db: AsyncSession, query: str, limit: int = 5) -> List[DocumentChunk]:
     """
-    Поиск похожих фрагментов в базе данных.
+    ГИБРИДНЫЙ ПОИСК (Hybrid Search).
+    Объединяет векторный поиск (смысл) и полнотекстовый поиск (ключевые слова).
     """
-    # --- ВАЖНО ДЛЯ E5 MODEL ---
-    # Модель E5 требует префикс "query: " для поисковых запросов,
-    # чтобы различать вопросы и ответы в векторном пространстве.
-    search_query = f"query: {query}"
 
-    query_vector = get_embedding_sync(search_query)
+    # --- 1. Векторный поиск (Semantic Search) ---
+    # Добавляем префикс для модели E5
+    vector_query = f"query: {query}"
+    query_vector = get_embedding_sync(vector_query)
 
-    stmt = select(DocumentChunk).order_by(
+    # Ищем топ-5 по смыслу
+    vector_stmt = select(DocumentChunk).order_by(
         DocumentChunk.embedding.cosine_distance(query_vector)
     ).limit(limit)
 
-    result = await db.execute(stmt)
-    chunks = list(result.scalars().all())
+    vector_results = (await db.execute(vector_stmt)).scalars().all()
 
-    # --- ЛОГИРОВАНИЕ РЕЗУЛЬТАТОВ ПОИСКА ---
-    logger.info(f"RAG Search for '{query}' found {len(chunks)} chunks.")
-    for idx, c in enumerate(chunks):
-        # Логируем первые 100 символов найденного куска
-        logger.info(f"Found Chunk #{idx} (Doc {c.document_id}): {c.content[:100]}...")
-    # --------------------------------------
+    # --- 2. Полнотекстовый поиск (Keyword Search) ---
+    # Используем Postgres TSVECTOR. Функция websearch_to_tsquery умеет работать
+    # с естественным языком (как поиск в Google).
+    keyword_stmt = select(DocumentChunk).where(
+        # @@ - оператор совпадения
+        text("search_vector @@ websearch_to_tsquery('russian', :q)")
+    ).order_by(
+        # Сортируем по релевантности (ts_rank)
+        text("ts_rank(search_vector, websearch_to_tsquery('russian', :q)) DESC")
+    ).limit(limit).params(q=query)
 
-    return chunks
+    keyword_results = (await db.execute(keyword_stmt)).scalars().all()
+
+    # --- 3. Слияние результатов (Fusion) ---
+    # Используем алгоритм чередования (Interleaved):
+    # Берем 1-й векторный, 1-й текстовый, 2-й векторный, 2-й текстовый и т.д.
+    # Исключаем дубликаты.
+
+    final_chunks = []
+    seen_ids = set()
+
+    # itertools.zip_longest позволяет пройтись по обоим спискам, даже если они разной длины
+    for v_chunk, k_chunk in itertools.zip_longest(vector_results, keyword_results):
+        if v_chunk and v_chunk.id not in seen_ids:
+            final_chunks.append(v_chunk)
+            seen_ids.add(v_chunk.id)
+
+        if k_chunk and k_chunk.id not in seen_ids:
+            # Если текстовый результат найден, добавляем его
+            final_chunks.append(k_chunk)
+            seen_ids.add(k_chunk.id)
+
+        # Если набрали достаточно (например, limit + 2 для запаса), можно остановиться
+        if len(final_chunks) >= limit + 2:
+            break
+
+    # Логирование для отладки
+    logger.info(
+        f"Hybrid Search: '{query}'. Found {len(vector_results)} vector matches, {len(keyword_results)} keyword matches.")
+    logger.info(f"Merged into {len(final_chunks)} unique chunks.")
+
+    return final_chunks[:limit]  # Возвращаем запрошенное количество
 
 
 async def generate_answer(context: str, question: str) -> str:
@@ -153,10 +175,9 @@ async def generate_answer(context: str, question: str) -> str:
     system_prompt = (
         "Ты — профессиональный помощник сотрудника МЧС. "
         "Твоя задача — отвечать на вопросы, строго основываясь на предоставленном контексте "
-        "из нормативных документов (приказов, регламентов). "
-        "Если в контексте нет информации для ответа, ответь: "
-        "'В загруженных документах нет информации по этому вопросу'. "
-        "Не придумывай факты от себя. Отвечай четко и по делу."
+        "из нормативных документов. "
+        "Если в контексте нет информации, ответь: 'В загруженных документах нет информации'. "
+        "Не придумывай факты. Указывай названия документов, если они есть в тексте."
     )
 
     user_prompt = f"Контекст:\n{context}\n\nВопрос: {question}"

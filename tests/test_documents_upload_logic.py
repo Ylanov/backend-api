@@ -3,6 +3,7 @@ import asyncio
 import json
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import UploadFile
@@ -58,8 +59,12 @@ def test_upload_document_success_with_all_fields(setup_upload_env):
     )
     tags_json = json.dumps(["report", "year2025", 123]) # теги могут быть разного типа
 
+    # Мок для фоновых задач
+    mock_bg_tasks = MagicMock()
+
     async def _call():
         return await documents_module.upload_document(
+            background_tasks=mock_bg_tasks,  # Передаем мок
             db=db,
             file=upload_file,
             title="Annual Report",
@@ -98,9 +103,11 @@ def test_upload_document_defaults_title_and_handles_no_tags(setup_upload_env):
     """
     db = DummySessionForUpload()
     upload_file = UploadFile(filename="data.xlsx", file=BytesIO(b"data"))
+    mock_bg_tasks = MagicMock()
 
     async def _call():
         return await documents_module.upload_document(
+            background_tasks=mock_bg_tasks,  # Передаем мок
             db=db,
             file=upload_file,
             title=None,
@@ -133,9 +140,11 @@ def test_upload_document_ignores_invalid_tags_format(setup_upload_env, tags_inpu
     db = DummySessionForUpload()
     # ИСПРАВЛЕНИЕ: Используем разрешенное расширение .pdf вместо .txt
     upload_file = UploadFile(filename="file.pdf", file=BytesIO(b"text"))
+    mock_bg_tasks = MagicMock()
 
     async def _call():
         return await documents_module.upload_document(
+            background_tasks=mock_bg_tasks,  # Передаем мок
             db=db,
             file=upload_file,
             title="File with bad tags",

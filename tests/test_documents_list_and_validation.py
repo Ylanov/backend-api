@@ -2,6 +2,7 @@
 import asyncio
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -89,9 +90,11 @@ def test_upload_document_no_file():
     """Если файл не передан, должен быть 400 'Файл не передан'."""
     # db здесь не используется (валидация отваливается раньше)
     db = object()
+    mock_bg_tasks = MagicMock()
 
     async def _call():
         await documents_module.upload_document(
+            background_tasks=mock_bg_tasks,  # Передаем мок
             db=db,
             file=None,           # ключевой момент
             title=None,
@@ -109,6 +112,7 @@ def test_upload_document_no_file():
 def test_upload_document_invalid_extension():
     """Если расширение файла не из ALLOWED_EXTENSIONS, должен быть 400."""
     db = object()
+    mock_bg_tasks = MagicMock()
 
     upload = UploadFile(
         filename="virus.exe",
@@ -117,6 +121,7 @@ def test_upload_document_invalid_extension():
 
     async def _call():
         await documents_module.upload_document(
+            background_tasks=mock_bg_tasks,  # Передаем мок
             db=db,
             file=upload,
             title=None,
@@ -145,6 +150,7 @@ def test_upload_document_too_large(tmp_path, monkeypatch):
     monkeypatch.setattr(documents_module, "UPLOAD_DIR", Path(tmp_path))
 
     db = object()
+    mock_bg_tasks = MagicMock()
 
     # Расширение допустимое (.pdf), но размер будет больше MAX_FILE_SIZE
     upload = UploadFile(
@@ -154,6 +160,7 @@ def test_upload_document_too_large(tmp_path, monkeypatch):
 
     async def _call():
         await documents_module.upload_document(
+            background_tasks=mock_bg_tasks,  # Передаем мок
             db=db,
             file=upload,
             title="Big file",
