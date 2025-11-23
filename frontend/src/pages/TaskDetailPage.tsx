@@ -75,8 +75,7 @@ export default function TaskDetailPage() {
     error,
   }: UseQueryResult<Task, Error> = useQuery<Task, Error>({
     queryKey: ["task", taskId] as const,
-    // Простая обёртка: React Query сам будет дергать эту функцию
-    queryFn: () => fetchTaskById(taskId),
+    queryFn: () => fetchTaskById,
     enabled: !Number.isNaN(taskId),
   });
 
@@ -99,10 +98,13 @@ export default function TaskDetailPage() {
     },
   });
 
+  // ИСПРАВЛЕНИЕ: Добавлена проверка Array.isArray, чтобы избежать ошибки "not iterable"
   const orderedComments = useMemo<TaskComment[]>(() => {
-    if (!task?.comments) {
+    // Если task.comments null, undefined или (важно!) не массив — возвращаем пустой список
+    if (!task?.comments || !Array.isArray(task.comments)) {
       return [];
     }
+    // Теперь безопасно использовать spread оператор
     return [...task.comments].sort(
       (first, second) =>
         new Date(first.created_at).getTime() -
@@ -113,11 +115,11 @@ export default function TaskDetailPage() {
   const handlePickFiles = () => fileInputRef.current?.click();
 
   const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files; // Сохраняем в переменную для корректного сужения типа
-    if (files) {
+    const selectedFiles = event.target.files;
+    if (selectedFiles) {
       setFiles((previous) => [
         ...previous,
-        ...Array.from(files),
+        ...Array.from(selectedFiles),
       ]);
     }
     event.target.value = "";

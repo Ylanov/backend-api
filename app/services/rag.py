@@ -188,7 +188,10 @@ async def generate_answer(context: str, question: str) -> str:
     ]
 
     try:
-        response = chat.invoke(messages)
+        # ИСПРАВЛЕНИЕ ЗДЕСЬ:
+        # Было: response = chat.invoke(messages)
+        # Стало: используем асинхронный вызов ainvoke с await
+        response = await chat.ainvoke(messages)
         return response.content
     except Exception as e:
         logger.error(f"Error calling GigaChat: {e}")
