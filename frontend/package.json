@@ -18,7 +18,7 @@
     "@mui/icons-material": "^5.16.5",
     "@mui/material": "^5.16.5",
     "@mui/x-date-pickers": "^8.16.0",
-    "@mui/x-tree-view": "^7.11.0",
+    "@mui/x-tree-view": "^8.19.0",
     "@pbe/react-yandex-maps": "^1.2.5",
     "@tanstack/react-query": "^5.90.7",
     "axios": "^1.7.2",
