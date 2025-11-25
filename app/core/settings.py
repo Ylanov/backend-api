@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # Название модели для эмбеддингов (локальная модель HuggingFace)
     # Она скачается сама при первом запуске в /tmp или кэш
     EMBEDDING_MODEL_NAME: str = Field("intfloat/multilingual-e5-large", env="EMBEDDING_MODEL_NAME")
+    # Kafka
+    KAFKA_BOOTSTRAP_SERVERS: str = "kafka-svc:9092" # Имя сервиса из k8s
+    KAFKA_TOPIC_TASKS: str = "pyro.tasks.events"
 
     @field_validator(
         "BACKEND_CORS_ORIGINS",

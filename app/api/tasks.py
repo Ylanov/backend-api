@@ -15,6 +15,10 @@ from app.schemas import (
 )
 from app.services.tasks import TASK_WITH_RELATIONS, patch_attachments_urls
 
+# --- Импорты для Kafka ---
+from app.core.settings import settings
+from app.services.kafka_producer import KafkaProducerService
+
 router = APIRouter(
     prefix="/tasks",
     tags=["tasks"],
@@ -26,8 +30,8 @@ ERROR_TASK_NOT_FOUND = "Task not found"
 
 @router.get("", response_model=List[TaskOut])
 async def list_tasks(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
+        request: Request,
+        db: AsyncSession = Depends(get_db),
 ):
     stmt = TASK_WITH_RELATIONS.order_by(Task.created_at.desc())
     result = await db.execute(stmt)
@@ -42,25 +46,41 @@ async def list_tasks(
 
 @router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 async def create_task(
-    payload: TaskCreate,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
+        payload: TaskCreate,
+        request: Request,
+        db: AsyncSession = Depends(get_db),
 ):
+    # 1. Сохранение в БД (Синхронная часть, источник правды)
     task = Task(**payload.model_dump())
     db.add(task)
     await db.commit()
 
+    # Подгружаем связи, чтобы вернуть полный объект
     stmt = TASK_WITH_RELATIONS.where(Task.id == task.id)
     result = await db.execute(stmt)
     refreshed_task = result.scalars().unique().first()
 
     if not refreshed_task:
-        # отдельное сообщение, не совпадает с ERROR_TASK_NOT_FOUND
         raise HTTPException(
             status_code=404,
             detail="Task not found after creation",
         )
 
+    # 2. Отправка события в Kafka (Асинхронная часть)
+    # Это событие поймает Consumer и отправит уведомления/обновит статистику
+    await KafkaProducerService.send_event(
+        topic=settings.KAFKA_TOPIC_TASKS,
+        event_type="task_created",
+        data={
+            "task_id": refreshed_task.id,
+            "title": refreshed_task.title,
+            "priority": refreshed_task.priority,
+            "status": refreshed_task.status,
+            "created_at": str(refreshed_task.created_at)
+        }
+    )
+
+    # 3. Формирование ответа
     base_url = str(request.base_url)
     patch_attachments_urls(refreshed_task, base_url)
 
@@ -69,9 +89,9 @@ async def create_task(
 
 @router.get("/{task_id}", response_model=TaskOut)
 async def get_task(
-    task_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
+        task_id: int,
+        request: Request,
+        db: AsyncSession = Depends(get_db),
 ):
     stmt = TASK_WITH_RELATIONS.where(Task.id == task_id)
     result = await db.execute(stmt)
@@ -88,10 +108,10 @@ async def get_task(
 
 @router.put("/{task_id}", response_model=TaskOut)
 async def update_task(
-    task_id: int,
-    payload: TaskUpdate,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
+        task_id: int,
+        payload: TaskUpdate,
+        request: Request,
+        db: AsyncSession = Depends(get_db),
 ):
     base_stmt = TASK_WITH_RELATIONS.where(Task.id == task_id)
     result = await db.execute(base_stmt)
@@ -106,8 +126,12 @@ async def update_task(
 
     await db.commit()
 
+    # Получаем обновленную версию
     result = await db.execute(base_stmt)
     task = result.scalars().unique().one()
+
+    # Здесь также можно добавить отправку события "task_updated" в Kafka,
+    # если потребуется в будущем.
 
     base_url = str(request.base_url)
     patch_attachments_urls(task, base_url)
@@ -117,8 +141,8 @@ async def update_task(
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
-    task_id: int,
-    db: AsyncSession = Depends(get_db),
+        task_id: int,
+        db: AsyncSession = Depends(get_db),
 ):
     task = await db.get(Task, task_id)
     if not task:
