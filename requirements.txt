@@ -27,4 +27,4 @@ python-docx # Для чтения DOCX
 tiktoken # Токенизатор
 langchain-huggingface
 docx2txt
-aiokafka==0.10.0
+aiokafka==0.12.0
