@@ -33,15 +33,15 @@ const AdminAuthorization: React.FC<AuthorizationProps> = ({ children, authorizat
   const isUserAuthenticated = useMemo(() => session.status === 'authenticated', [session.status]);
 
   const checkPathname = useCallback((pattern: string, pathname: string) => {
-    // Ensure the inputs are strings
+    // Убедиться, что входные данные являются строками
     if (typeof pattern !== 'string' || typeof pathname !== 'string') {
       return false;
     }
 
-    // Convert pattern to a regex pattern
+    // Преобразование шаблона в регулярное выражение
     const regexPattern = new RegExp(`^${pattern.replace(/[\/.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*')}$`);
 
-    // Test the pathname against the regex pattern
+    // Проверка пути на соответствие регулярному выражению
     return regexPattern.test(pathname);
   }, []);
 
@@ -50,7 +50,7 @@ const AdminAuthorization: React.FC<AuthorizationProps> = ({ children, authorizat
 
   const authorizeUser = useCallback(() => {
     if (loading) {
-      return; // Wait until the admin status is determined
+      return; // Подождать, пока определится статус администратора
     }
 
     if (!isUserAuthenticated) {
@@ -89,7 +89,7 @@ const AdminAuthorization: React.FC<AuthorizationProps> = ({ children, authorizat
   if (authorizationMode === 'page' && !isAuthorized) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <h1 className="text-2xl">You are not authorized to access this page</h1>
+        <h1 className="text-2xl">Вы не авторизованы для доступа к этой странице</h1>
       </div>
     );
   }

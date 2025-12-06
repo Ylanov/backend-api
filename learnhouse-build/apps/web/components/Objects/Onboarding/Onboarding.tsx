@@ -60,16 +60,16 @@ const Onboarding: React.FC = () => {
   const onboardingData: OnboardingStep[] = [
     {
       imageSrc: OnBoardWelcome,
-      title: 'Teach the world!',
-      description: 'Welcome to LearnHouse, a LMS engineered for simplicity, ease of use and performance, meet the new way to create, share, and engage with educational content.',
+      title: 'Обучайте весь мир!',
+      description: 'Добро пожаловать в LearnHouse — LMS, созданную для простоты, удобства и высокой производительности. Познакомьтесь с новым способом создания, распространения и взаимодействия с образовательным контентом.',
     },
     {
       imageSrc: OnBoardCourses,
-      title: 'Create Courses',
-      description: 'Courses are the main building blocks of LearnHouse, they always contain Chapters and Chapters contain Activities.',
+      title: 'Создавайте курсы',
+      description: 'Курсы — это основные строительные блоки LearnHouse. Они всегда содержат главы, а главы содержат активности.',
       buttons: [
         {
-          label: 'Create New Course',
+          label: 'Создать новый курс',
           action: () => router.push(getUriWithOrg(org?.slug, '/courses?new=true')),
           icon: <Book size={16} />,
         },
@@ -77,47 +77,47 @@ const Onboarding: React.FC = () => {
     },
     {
       imageSrc: OnBoardActivities,
-      title: 'Activities',
-      description: 'Activities are elements you can add to your Courses via Chapters, they can be : Dynamic Pages, Videos, Documents, Quizz and more soon.',
+      title: 'Добавляйте активности',
+      description: 'Активности — это интерактивный контент внутри глав: тесты, задания, видео, файлы и многое другое.',
       buttons: [
         {
-          label: 'Learn more about activities',
-          action: () => window.open('https://university.learnhouse.io/course/be89716c-9992-44bb-81df-ef3d76e355ba', '_blank'),
+          label: 'Управление активностями',
+          action: () => window.open('https://university.learnhouse.io/course/be89716c-9992-44bb-81df-ef3d76e355ba', '_blank'), //TODO
           icon: <Info size={16} />,
         },
       ],
     },
     {
       imageSrc: OnBoardEditor,
-      title: 'Dynamic pages and The Editor',
-      description: 'Dynamic pages are pages with dynamic content, like Notion pages they can contain various components like Quizzes, Images, Videos, Documents etc',
+      title: 'Визуальный редактор',
+      description: 'Интуитивный редактор позволяет создавать контент без кода. Перетаскивайте элементы, настраивайте стили и логику.',
       buttons: [
         {
           label: 'Learn more about Dynamic Pages and The Editor',
-          action: () => window.open('https://university.learnhouse.io/course/be89716c-9992-44bb-81df-ef3d76e355ba', '_blank'),
+          action: () => window.open('https://university.learnhouse.io/course/be89716c-9992-44bb-81df-ef3d76e355ba', '_blank'), //TODO
           icon: <Info size={16} />,
         },
       ],
     },
     {
       imageSrc: OnBoardAI,
-      title: 'Artificial Intelligence',
-      description: 'Tools for tought made for teachers and students alike, context aware it can reply based on your courses and the unique content you create on LearnHouse',
+      title: 'Искусственный интеллект',
+      description: 'AI помощник генерирует контент, тесты и задания автоматически. Просто опишите, что нужно — и получите готовый материал.',
       buttons: [
         {
-          label: 'Learn more about LearnHouse AI',
-          action: () => window.open('https://docs.learnhouse.app/features/ai/students', '_blank'),
+          label: 'Попробовать AI',
+          action: () => window.open('https://docs.learnhouse.app/features/ai/students', '_blank'), //TODO
           icon: <Sparkle size={16} />,
         },
       ],
     },
     {
       imageSrc: OnBoardUGs,
-      title: 'Group students and streamline access ',
-      description: 'With UserGroups you can separate students by Groups and give access to Courses depending on their needs',
+      title: 'Управление группами',
+      description: 'Создавайте группы студентов, распределяйте их по курсам и отслеживайте прогресс обучения.',
       buttons: [
         {
-          label: 'Create UserGroups',
+          label: 'Создать группу',
           action: () => router.push(getUriWithOrg(org?.slug, '/dash/users/settings/usergroups')),
           icon: <SquareUser size={16} />,
         },
@@ -125,19 +125,19 @@ const Onboarding: React.FC = () => {
     },
     {
       imageSrc: OnBoardAccess,
-      title: 'Choose whether to make Courses available on the Web or not ',
-      description: 'You can choose to make your Courses discoverable from search engines and accesible to non authenticated users or to only give it to authenticated Users',
+      title: 'Гибкие права доступа',
+      description: 'Настраивайте роли и разрешения для преподавателей, студентов и администраторов с гранулярным контролем.',
       buttons: [
 
       ],
     },
     {
       imageSrc: OnBoardAssignments,
-      title: 'Create and Grade Assignments',
-      description: 'Engage students with assignments, track their progress, and provide feedback through our intuitive grading system.',
+      title: 'Задания и проверка',
+      description: 'Автоматическая и ручная проверка заданий. Поддержка различных типов оценивания и обратной связи.',
       buttons: [
         {
-          label: 'Create Assignment',
+          label: 'Создать проверку',
           action: () => router.push(getUriWithOrg(org?.slug, '/dash/assignments?new=true')),
           icon: <Book size={16} />,
         },
@@ -145,11 +145,11 @@ const Onboarding: React.FC = () => {
     },
     {
       imageSrc: OnBoardPayments,
-      title: 'Monetize Your Content',
-      description: 'Set up payment plans, sell courses, and manage subscriptions with our integrated payment system.',
+      title: 'Монетизация',
+      description: 'Интеграция платежных систем для продажи курсов и подписок. Полный контроль над ценообразованием.',
       buttons: [
         {
-          label: 'Payment Settings',
+          label: 'Настроить платежи',
           action: () => router.push(getUriWithOrg(org?.slug, '/dash/payments/customers')),
           icon: <CreditCard size={16} />,
         },
@@ -157,12 +157,12 @@ const Onboarding: React.FC = () => {
     },
     {
       imageSrc: OnBoardMore,
-      title: 'To infinity and beyond',
-      description: "To Learn more about LearnHouse, you're welcome to follow our Original courses on the LearnHouse University",
+      title: 'И многое другое',
+      description: "Аналитика, сертификаты, уведомления, интеграции и многое другое для полного контроля над обучением.",
       buttons: [
         {
           label: 'LearnHouse University',
-          action: () => window.open('https://university.learnhouse.io', '_blank'),
+          action: () => window.open('https://university.learnhouse.io', '_blank'), //TODO
           icon: <Globe size={16} />,
         },
       ],

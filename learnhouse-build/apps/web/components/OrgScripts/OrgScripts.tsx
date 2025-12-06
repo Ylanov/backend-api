@@ -7,7 +7,7 @@ import DOMPurify from 'dompurify'
 const OrgScripts: React.FC = () => {
   const org = useOrg() as any
 
-  // Function to cleanup existing scripts
+  // Функция для очистки существующих скриптов
   const cleanupExistingScript = (scriptId: string) => {
     const existingScript = document.getElementById(scriptId)
     if (existingScript) {
@@ -30,13 +30,13 @@ const OrgScripts: React.FC = () => {
     }
   }
 
-  // Function to check if script is already loaded
+  // Функция для проверки, загружен ли скрипт уже
   const isScriptLoaded = (scriptName: string): boolean => {
     const scripts = document.querySelectorAll(`script[data-script-name="${scriptName}"]`)
     return scripts.length > 0
   }
 
-  // Function to sanitize script content using DOMPurify
+  // Функция для очистки содержимого скрипта с использованием DOMPurify
   const sanitizeScriptContent = (content: string): string => {
     if (typeof window === 'undefined') {
       return content;
@@ -73,7 +73,7 @@ const OrgScripts: React.FC = () => {
     }
   }
 
-  // Function to safely load and execute a script
+  // Функция для безопасной загрузки и выполнения скрипта
   const loadScript = (scriptContent: string, scriptName: string) => {
     try {
       if (isScriptLoaded(scriptName) || !scriptContent.trim()) {
@@ -107,11 +107,11 @@ const OrgScripts: React.FC = () => {
               scriptElement.dataset.loaded = 'true'
             }
             scriptElement.onerror = (error) => {
-              console.error(`Failed to load external script "${scriptName}":`, error)
+              console.error(`Не удалось загрузить внешний скрипт "${scriptName}":`, error)
               cleanupExistingScript(safeScriptId)
             }
           } catch (error) {
-            console.error(`Invalid script URL in "${scriptName}":`, error)
+            console.error(`Неверный URL скрипта в "${scriptName}":`, error)
             return
           }
         } else {
@@ -124,7 +124,7 @@ const OrgScripts: React.FC = () => {
                 ${sanitizedContent}
               })();
             } catch (error) {
-              console.error("Script error in ${scriptName}:", error);
+              console.error("Ошибка скрипта в ${scriptName}:", error);
             }
           `
         }
@@ -152,7 +152,7 @@ const OrgScripts: React.FC = () => {
               ${sanitizedContent}
             })();
           } catch (error) {
-            console.error("Script error in ${scriptName}:", error)
+            console.error("Ошибка скрипта в ${scriptName}:", error)
           }
         `
         
@@ -168,7 +168,7 @@ const OrgScripts: React.FC = () => {
         document.body.appendChild(scriptElement)
       }
     } catch (error) {
-      console.error(`Failed to load script ${scriptName}:`, error)
+      console.error(`Не удалось загрузить скрипт ${scriptName}:`, error)
     }
   }
 
@@ -180,7 +180,7 @@ const OrgScripts: React.FC = () => {
     const loadedScripts = new Map()
     
     org.scripts.scripts.forEach((script: { content: string, name: string }, index: number) => {
-      const scriptName = script.name || `Script ${index + 1}`
+      const scriptName = script.name || `Скрипт ${index + 1}`
       
       if (!loadedScripts.has(scriptName) && script.content) {
         loadedScripts.set(scriptName, true)

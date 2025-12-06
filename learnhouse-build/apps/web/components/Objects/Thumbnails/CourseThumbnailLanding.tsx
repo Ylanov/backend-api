@@ -73,22 +73,22 @@ const AdminEditOptions: React.FC<AdminEditOptionsProps> = ({ course, orgslug, de
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuItem asChild>
               <Link prefetch href={getUriWithOrg(orgslug, `/dash/courses/course/${removeCoursePrefix(course.course_uuid)}/content`)}>
-                <FilePenLine className="mr-2 h-4 w-4" /> Edit Content
+                <FilePenLine className="mr-2 h-4 w-4" /> Редактировать контент
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link prefetch href={getUriWithOrg(orgslug, `/dash/courses/course/${removeCoursePrefix(course.course_uuid)}/general`)}>
-                <Settings2 className="mr-2 h-4 w-4" /> Settings
+                <Settings2 className="mr-2 h-4 w-4" /> Настройки
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <ConfirmationModal
-                confirmationButtonText="Delete Course"
-                confirmationMessage="Are you sure you want to delete this course?"
-                dialogTitle={`Delete ${course.name}?`}
+                confirmationButtonText="Удалить курс"
+                confirmationMessage="Вы уверены, что хотите удалить этот курс?"
+                dialogTitle={`Удалить ${course.name}?`}
                 dialogTrigger={
                   <button className="w-full text-left flex items-center px-2 py-1 rounded-md text-sm bg-rose-500/10 hover:bg-rose-500/20 transition-colors text-red-600">
-                    <BookMinus className="mr-4 h-4 w-4" /> Delete Course
+                    <BookMinus className="mr-4 h-4 w-4" /> Удалить курс
                   </button>
                 }
                 functionToExecute={deleteCourse}
@@ -113,14 +113,14 @@ const CourseThumbnailLanding: React.FC<PropsType> = ({ course, orgslug, customLi
   const remainingAuthorsCount = activeAuthors.length - 3
 
   const deleteCourse = async () => {
-    const toastId = toast.loading('Deleting course...')
+    const toastId = toast.loading('Удаление курса...')
     try {
       await deleteCourseFromBackend(course.course_uuid, session.data?.tokens?.access_token)
       await revalidateTags(['courses'], orgslug)
-      toast.success('Course deleted successfully')
+      toast.success('Курс успешно удален')
       router.refresh()
     } catch (error) {
-      toast.error('Failed to delete course')
+      toast.error('Не удалось удалить курс')
     } finally {
       toast.dismiss(toastId)
     }
@@ -196,7 +196,7 @@ const CourseThumbnailLanding: React.FC<PropsType> = ({ course, orgslug, customLi
           href={customLink ? customLink : getUriWithOrg(orgslug, `/course/${removeCoursePrefix(course.course_uuid)}`)}
           className="inline-flex items-center justify-center w-full px-3 py-1.5 bg-black text-white text-xs font-medium rounded-lg hover:bg-gray-800 transition-colors"
         >
-          Start Learning
+          Начать обучение
         </Link>
       </div>
     </div>

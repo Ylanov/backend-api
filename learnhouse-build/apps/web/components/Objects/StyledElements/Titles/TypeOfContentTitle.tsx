@@ -17,7 +17,7 @@ function TypeOfContentTitle(props: { title: string; type: string }) {
   return (
     <div className="home_category_title flex my-5 items-center">
       <div className="ml-2 rounded-full ring-1 ring-slate-900/5 shadow-inner p-2 my-auto mr-4">
-        <Image unoptimized className="" src={getLogo()} alt="Courses logo" />
+        <Image unoptimized className="" src={getLogo()} alt="Логотип курсов" />
       </div>
       <h1 className="font-bold text-2xl">{props.title}</h1>
     </div>

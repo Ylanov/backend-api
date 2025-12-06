@@ -29,13 +29,13 @@ export const AuthenticatedClientElement = (
     resourceType: string,
     org_uuid: string
   ): boolean {
-    // Iterate over the user's roles
+    // Итерация по ролям пользователя
     for (const role of roles) {
-      // Check if the role is for the right organization
+      // Проверка, относится ли роль к правильной организации
       if (role.org.org_uuid === org_uuid) {
-        // Check if the user has the role for the resource type
+        // Проверка, есть ли у пользователя роль для данного типа ресурса
         if (role.role.rights && role.role.rights[resourceType]) {
-          // Check if the user is allowed to execute the action
+          // Проверка, разрешено ли пользователю выполнять действие
           const actionKey = `action_${action}`
           if (role.role.rights[resourceType][actionKey] === true) {
             return true
@@ -44,7 +44,7 @@ export const AuthenticatedClientElement = (
       }
     }
 
-    // If no role matches the organization, resource type, and action, return false
+    // Если ни одна роль не соответствует организации, типу ресурса и действию, возвращаем false
     return false
   }
 

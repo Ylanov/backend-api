@@ -43,12 +43,12 @@ export const HeaderProfileBox = () => {
   const userRoleInfo = useMemo((): RoleInfo | null => {
     if (!userRoles || userRoles.length === 0) return null;
 
-    // Find the highest priority role for the current organization
+    // Находим роль с наивысшим приоритетом для текущей организации
     const orgRoles = userRoles.filter((role: any) => role.org.id === org?.id);
     
     if (orgRoles.length === 0) return null;
 
-    // Sort by role priority (admin > maintainer > instructor > user)
+    // Сортируем по приоритету ролей (админ > мейнтейнер > инструктор > пользователь)
     const sortedRoles = orgRoles.sort((a: any, b: any) => {
       const getRolePriority = (role: any) => {
         if (role.role.role_uuid === 'role_global_admin' || role.role.id === 1) return 4;
@@ -61,39 +61,39 @@ export const HeaderProfileBox = () => {
 
     const highestRole = sortedRoles[0];
 
-    // Define role configurations based on actual database roles
+    // Определяем конфигурации ролей на основе фактических ролей из базы данных
     const roleConfigs: { [key: string]: RoleInfo } = {
       'role_global_admin': {
         name: 'ADMIN',
         icon: <Crown size={12} />,
         bgColor: 'bg-purple-600',
         textColor: 'text-white',
-        description: 'Full platform control with all permissions'
+        description: 'Полный контроль платформы со всеми разрешениями'
       },
       'role_global_maintainer': {
         name: 'MAINTAINER',
         icon: <Shield size={12} />,
         bgColor: 'bg-blue-600',
         textColor: 'text-white',
-        description: 'Mid-level manager with wide permissions'
+        description: 'Менеджер среднего уровня с широкими разрешениями'
       },
       'role_global_instructor': {
         name: 'INSTRUCTOR',
         icon: <Users size={12} />,
         bgColor: 'bg-green-600',
         textColor: 'text-white',
-        description: 'Can manage their own content'
+        description: 'Может управлять своим собственным контентом'
       },
       'role_global_user': {
         name: 'USER',
         icon: <User size={12} />,
         bgColor: 'bg-gray-500',
         textColor: 'text-white',
-        description: 'Read-Only Learner'
+        description: 'Обучающийся с доступом только для чтения'
       }
     };
 
-    // Determine role based on role_uuid or id
+    // Определяем роль на основе role_uuid или id
     let roleKey = 'role_global_user'; // default
     if (highestRole.role.role_uuid) {
       roleKey = highestRole.role.role_uuid;
@@ -111,14 +111,14 @@ export const HeaderProfileBox = () => {
   const customRoles = useMemo((): CustomRoleInfo[] => {
     if (!userRoles || userRoles.length === 0) return [];
 
-    // Find roles for the current organization
+    // Находим роли для текущей организации
     const orgRoles = userRoles.filter((role: any) => role.org.id === org?.id);
     
     if (orgRoles.length === 0) return [];
 
-    // Filter for custom roles (not system roles)
+    // Фильтруем кастомные роли (не системные роли)
     const customRoles = orgRoles.filter((role: any) => {
-      // Check if it's a system role
+      // Проверяем, является ли роль системной
       const isSystemRole = 
         role.role.role_uuid?.startsWith('role_global_') ||
         [1, 2, 3, 4].includes(role.role.id) ||
@@ -205,20 +205,20 @@ export const HeaderProfileBox = () => {
                   <DropdownMenuItem asChild>
                     <Link href="/dash" className="flex items-center space-x-2">
                       <Shield size={16} />
-                      <span>Dashboard</span>
+                      <span>Панель управления</span>
                     </Link>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem asChild>
                   <Link href="/dash/user-account/settings/general" className="flex items-center space-x-2">
                     <UserIcon size={16} />
-                    <span>User Settings</span>
+                    <span>Настройки пользователя</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/dash/user-account/owned" className="flex items-center space-x-2">
                     <Package2 size={16} />
-                    <span>My Courses</span>
+                    <span>Мои курсы</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -227,7 +227,7 @@ export const HeaderProfileBox = () => {
                   className="flex items-center space-x-2 text-red-600 focus:text-red-600"
                 >
                   <LogOut size={16} />
-                  <span>Sign Out</span>
+                  <span>Выйти</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

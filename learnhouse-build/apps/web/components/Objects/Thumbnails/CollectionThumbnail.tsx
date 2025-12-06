@@ -92,9 +92,9 @@ const CollectionAdminEditsArea = (props: any) => {
     >
       <div className="z-20">
         <ConfirmationModal
-          confirmationMessage="Are you sure you want to delete this collection?"
-          confirmationButtonText="Delete Collection"
-          dialogTitle={'Delete ' + props.collection.name + '?'}
+          confirmationMessage="Вы уверены, что хотите удалить эту коллекцию?"
+          confirmationButtonText="Удалить коллекцию"
+          dialogTitle={'Удалить ' + props.collection.name + '?'}
           dialogTrigger={
             <button
               className="absolute right-2 top-2 rounded-full bg-red-500 p-2 text-white transition-colors duration-300 hover:bg-red-600"

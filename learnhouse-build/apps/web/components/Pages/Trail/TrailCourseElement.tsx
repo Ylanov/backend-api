@@ -62,7 +62,7 @@ function TrailCourseElement(props: TrailCourseElementProps) {
           setCourseCertificate(result.data[0])
         }
       } catch (error) {
-        console.error('Error fetching course certificate:', error)
+        console.error('Ошибка при получении сертификата курса: ', error)
       } finally {
         setIsLoadingCertificate(false)
       }

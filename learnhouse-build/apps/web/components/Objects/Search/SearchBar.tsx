@@ -142,23 +142,23 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           session?.data?.tokens?.access_token
         );
         
-        console.log('Search API Response:', response); // Debug log
+        console.log('Ответ поискового API:', response); // Debug log
 
-        // Type assertion and safe access
+        // Приведение типа и безопасный доступ
         const typedResponse = response.data as any;
         
-        // Ensure we have the correct structure and handle potential undefined values
+        // Обеспечиваем правильную структуру и обрабатываем потенциальные undefined значения
         const processedResults: SearchResults = {
           courses: Array.isArray(typedResponse?.courses) ? typedResponse.courses : [],
           collections: Array.isArray(typedResponse?.collections) ? typedResponse.collections : [],
           users: Array.isArray(typedResponse?.users) ? typedResponse.users : []
         };
 
-        console.log('Processed Results:', processedResults); // Debug log
+        console.log('Обработанные результаты:', processedResults); // Отладочный лог
         
         setSearchResults(processedResults);
       } catch (error) {
-        console.error('Error searching content:', error);
+        console.error('Ошибка поиска контента:', error);
         setSearchResults({ courses: [], collections: [], users: [] });
       }
       setIsLoading(false);
@@ -177,10 +177,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               <Sparkles className="w-6 h-6 text-black/70" />
             </div>
             <h3 className="text-sm font-medium text-black/80 mb-1">
-              Discover Your Next Learning Journey
+              Откройте для себя новое учебное путешествие
             </h3>
             <p className="text-xs text-black/50 max-w-[240px]">
-              Start typing to search through available content
+              Начните вводить текст для поиска доступного контента
             </p>
           </div>
         </div>
@@ -201,7 +201,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         <div className="p-2">
           <div className="flex items-center gap-2 px-2 py-2 text-sm text-black/50">
             <ScanSearch size={16} />
-            <span className="font-medium">Search suggestions</span>
+            <span className="font-medium">Поисковые подсказки</span>
           </div>
           <div className="space-y-1">
             {searchTerms.map(({ term, type, icon }) => (
@@ -235,7 +235,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       <div className="p-2">
         <div className="flex items-center gap-2 px-2 py-2 text-sm text-black/50">
           <TextSearch size={16} />
-          <span className="font-medium">Quick Results</span>
+          <span className="font-medium">Быстрые результаты</span>
         </div>
 
         {/* Courses Section */}
@@ -243,7 +243,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <div className="mb-2">
             <div className="flex items-center gap-2 px-2 py-1 text-xs text-black/40">
               <GraduationCap size={12} />
-              <span>Courses</span>
+              <span>Курсы</span>
             </div>
             {searchResults.courses.map((course) => (
               <Link
@@ -284,7 +284,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <div className="mb-2">
             <div className="flex items-center gap-2 px-2 py-1 text-xs text-black/40">
               <Book size={12} />
-              <span>Collections</span>
+              <span>Коллекции</span>
             </div>
             {searchResults.collections.map((collection) => (
               <Link
@@ -312,7 +312,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <div className="mb-2">
             <div className="flex items-center gap-2 px-2 py-1 text-xs text-black/40">
               <Users size={12} />
-              <span>Users</span>
+              <span>Пользователи</span>
             </div>
             {searchResults.users.map((user) => (
               <Link
@@ -334,7 +334,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
                     <h3 className="text-sm font-medium text-black/80 truncate">
                       {user.first_name} {user.last_name}
                     </h3>
-                    <span className="text-[10px] font-medium text-black/40 uppercase tracking-wide whitespace-nowrap">User</span>
+                    <span className="text-[10px] font-medium text-black/40 uppercase tracking-wide whitespace-nowrap">Пользователь</span>
                   </div>
                   <p className="text-xs text-black/50 truncate">@{user.username}</p>
                 </div>
@@ -359,8 +359,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           value={searchQuery}
           onChange={handleSearchChange}
           onFocus={() => setShowResults(true)}
-          placeholder="Search courses, users, collections..."
-          className="w-full h-9 pl-11 pr-4 rounded-xl nice-shadow bg-white 
+          placeholder="Поиск курсов, пользователей, коллекций..."
+          className="w-full h-9 pl-11 pr-4 rounded-xl nice-shadow bg-white
                      focus:outline-none focus:ring-1 focus:ring-black/5 focus:border-black/20 
                      text-sm placeholder:text-black/40 transition-all"
         />
@@ -394,7 +394,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
                     href={getUriWithOrg(orgslug, `/search?q=${encodeURIComponent(searchQuery)}`)}
                     className="flex items-center justify-between px-4 py-2.5 text-xs text-black/50 hover:text-black/70 hover:bg-black/[0.02] transition-colors"
                   >
-                    <span>View all results</span>
+                    <span>Показать все результаты</span>
                     <ArrowRight size={14} />
                   </Link>
                 )}

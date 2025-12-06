@@ -10,7 +10,7 @@ function InfoUI(params: { message?: string, submessage?: string, cta?: string, h
             <div className="flex flex-row  items-center space-x-5  rounded-xl ">
                 <Diamond className="text-yellow-700" size={45} />
                 <div className='flex flex-col'>
-                    <p className="text-3xl font-bold text-yellow-700">{params.message ? params.message : 'Something went wrong'}</p>
+                    <p className="text-3xl font-bold text-yellow-700">{params.message ? params.message : 'Что-то пошло не так'}</p>
                     <p className="text-lg font-bold text-yellow-700">{params.submessage ? params.submessage : ''}</p>
                 </div>
             </div>
@@ -27,7 +27,7 @@ function InfoUI(params: { message?: string, submessage?: string, cta?: string, h
                     className="flex space-x-2 items-center rounded-full px-4 py-1 text-gray-200 bg-gray-700 hover:bg-gray-800 transition-all ease-linear shadow-lg "
                 >
                     <Home className="text-gray-200" size={17} />
-                    <span className="text-md font-bold">Home</span>
+                    <span className="text-md font-bold">На главную</span>
                 </Link>
             </div>}
         </div>

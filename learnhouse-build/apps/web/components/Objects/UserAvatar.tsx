@@ -32,7 +32,7 @@ function UserAvatar(props: UserAvatarProps) {
           const data = await getUserByUsername(props.username)
           setUserData(data)
         } catch (error) {
-          console.error('Error fetching user by username:', error)
+          console.error('Ошибка при получении пользователя по имени:', error)
         }
       }
     }
@@ -45,7 +45,7 @@ function UserAvatar(props: UserAvatarProps) {
   }
 
   const extractExternalUrl = (url: string): string | null => {
-    // Check if the URL contains an embedded external URL
+    // Проверяем, содержит ли URL встроенный внешний URL
     const matches = url.match(/avatars\/(https?:\/\/[^/]+.*$)/)
     if (matches && matches[1]) {
       return matches[1]
@@ -54,56 +54,56 @@ function UserAvatar(props: UserAvatarProps) {
   }
 
   const getAvatarUrl = (): string => {
-    // If predefined avatar is specified
+    // Если указан предопределенный аватар
     if (props.predefined_avatar) {
       const avatarType = props.predefined_avatar === 'ai' ? 'ai_avatar.png' : 'empty_avatar.png'
       return getUriWithOrg(params.orgslug, `/${avatarType}`)
     }
 
-    // If avatar_url prop is provided
+    // Если предоставлен avatar_url пропс
     if (props.avatar_url) {
-      // Check if it's a malformed URL (external URL processed through getUserAvatarMediaDirectory)
+      // Проверяем, является ли это некорректным URL (внешний URL, обработанный через getUserAvatarMediaDirectory)
       const extractedUrl = extractExternalUrl(props.avatar_url)
       if (extractedUrl) {
         return extractedUrl
       }
-      // If it's a direct external URL
+      // Если это прямой внешний URL
       if (isExternalUrl(props.avatar_url)) {
         return props.avatar_url
       }
-      // Otherwise use as is
+      // Иначе используем как есть
       return props.avatar_url
     }
 
-    // If we have user data from username fetch
+    // Если у нас есть данные пользователя из поиска по имени
     if (userData?.avatar_image) {
       const avatarUrl = userData.avatar_image
-      // If it's an external URL (e.g., from Google, Facebook, etc.), use it directly
+      // Если это внешний URL (например, из Google, Facebook и т.д.), используем его напрямую
       if (isExternalUrl(avatarUrl)) {
         return avatarUrl
       }
-      // Otherwise, get the local avatar URL
+      // Иначе получаем локальный URL аватара
       return getUserAvatarMediaDirectory(userData.user_uuid, avatarUrl)
     }
 
-    // If user has an avatar in session (only if session exists)
+    // Если у пользователя есть аватар в сессии (только если сессия существует)
     if (session?.data?.user?.avatar_image) {
       const avatarUrl = session.data.user.avatar_image
-      // If it's an external URL (e.g., from Google, Facebook, etc.), use it directly
+      // Если это внешний URL (например, из Google, Facebook и т.д.), используем его напрямую
       if (isExternalUrl(avatarUrl)) {
         return avatarUrl
       }
-      // Otherwise, get the local avatar URL
+      //  Иначе получаем локальный URL аватара
       return getUserAvatarMediaDirectory(session.data.user.user_uuid, avatarUrl)
     }
 
-    // Fallback to empty avatar
+    //  Запасной вариант - пустой аватар
     return getUriWithOrg(params.orgslug, '/empty_avatar.png')
   }
 
   const avatarImage = (
     <img
-      alt="User Avatar"
+      alt="Аватар пользователя"
       width={props.width ?? 50}
       height={props.width ?? 50}
       src={getAvatarUrl()}

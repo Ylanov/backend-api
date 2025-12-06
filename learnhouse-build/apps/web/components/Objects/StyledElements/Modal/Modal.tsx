@@ -50,7 +50,7 @@ const Modal = (params: ModalParams) => {
         "w-[95vw] max-w-[95vw]",
         "max-h-[90vh]",
         "p-3 sm:p-4 md:p-6",
-        // Mobile-first responsive design
+        // Адаптивный дизайн с приоритетом для мобильных устройств
         "sm:w-[90vw] sm:max-w-[90vw]",
         "md:w-auto md:max-w-[90vw]",
         "lg:max-w-[85vw]",
@@ -75,8 +75,8 @@ const Modal = (params: ModalParams) => {
           <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
             {params.dialogClose}
             {params.addDefCloseButton && (
-              <ButtonBlack type="submit" aria-label="Close modal">
-                Close
+              <ButtonBlack type="submit" aria-label="Закрыть модальное окно">
+                Закрыть
               </ButtonBlack>
             )}
           </DialogFooter>

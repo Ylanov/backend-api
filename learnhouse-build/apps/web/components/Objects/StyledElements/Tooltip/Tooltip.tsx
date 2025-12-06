@@ -7,9 +7,9 @@ type TooltipProps = {
   sideOffset?: number
   content: React.ReactNode
   children: React.ReactNode
-  side?: 'top' | 'right' | 'bottom' | 'left' // default is bottom
+  side?: 'top' | 'right' | 'bottom' | 'left' // по умолчанию снизу
   slateBlack?: boolean
-  unstyled?: boolean // new prop to remove default styling
+  unstyled?: boolean // новый пропс для удаления стилей по умолчанию
 }
 
 const ToolTip = (props: TooltipProps) => {

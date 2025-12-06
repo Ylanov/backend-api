@@ -9,7 +9,7 @@ export default function StyledComponentsRegistry({
 }: {
   children: React.ReactNode
 }) {
-  // Only create stylesheet once with lazy initial state
+  // Создаем таблицу стилей только один раз с ленивым начальным состоянием
   // x-ref: https://reactjs.org/docs/hooks-reference.html#lazy-initial-state
   const [styledComponentsStyleSheet] = useState(() => new ServerStyleSheet())
 

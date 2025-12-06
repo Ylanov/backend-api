@@ -18,7 +18,7 @@ function ErrorUI(params: { message?: string, submessage?: string }) {
       <div className="flex flex-row  items-center space-x-5  rounded-xl ">
         <AlertTriangle className="text-rose-700" size={45} />
         <div className='flex flex-col'>
-          <p className="text-3xl font-bold text-rose-700">{params.message ? params.message : 'Something went wrong'}</p>
+          <p className="text-3xl font-bold text-rose-700">{params.message ? params.message : 'Что-то пошло не так'}</p>
           <p className="text-lg font-bold text-rose-700">{params.submessage ? params.submessage : ''}</p>
         </div>
       </div>
@@ -28,14 +28,14 @@ function ErrorUI(params: { message?: string, submessage?: string }) {
           className="flex space-x-2 items-center rounded-full px-4 py-1 text-rose-200 bg-rose-700 hover:bg-rose-800 transition-all ease-linear shadow-lg "
         >
           <RefreshCcw className="text-rose-200" size={17} />
-          <span className="text-md font-bold">Retry</span>
+          <span className="text-md font-bold">Повторить</span>
         </button>
         <Link
           href={getUriWithoutOrg('/home')}
           className="flex space-x-2 items-center rounded-full px-4 py-1 text-gray-200 bg-gray-700 hover:bg-gray-800 transition-all ease-linear shadow-lg "
         >
           <HomeIcon className="text-gray-200" size={17} />
-          <span className="text-md font-bold">Home</span>
+          <span className="text-md font-bold">На главную</span>
         </Link>
       </div>
     </div>

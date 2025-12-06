@@ -58,8 +58,8 @@ const UserProfilePopup = ({ children, userId }: UserProfilePopupProps) => {
         const data = await getUser(userId, session?.data?.tokens?.access_token)
         setUserData(data)
       } catch (err) {
-        setError('Failed to load user data')
-        console.error('Error fetching user data:', err)
+        setError('Не удалось загрузить данные пользователя')
+        console.error('Ошибка при загрузке данных пользователя:', err)
       } finally {
         setIsLoading(false)
       }
