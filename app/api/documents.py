@@ -7,46 +7,35 @@ from pathlib import Path
 from typing import List, Optional
 
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
-from app.database import get_db, SessionLocal # Импортируем SessionLocal для фоновых задач
+from app.database import get_db
 from app.models import Document
 from app.schemas import Document as DocumentOut
-
-# Импортируем функцию обработки RAG
-from app.services.rag import process_document
+from app.services.kafka_producer import KafkaProducerService # <-- Импорт продюсера
 
 router = APIRouter(
     prefix="/documents",
     tags=["documents"],
 )
 
-# Разрешённые расширения и лимиты
+# Разрешённые расширения
 ALLOWED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".pdf",
     ".doc", ".docx", ".xls", ".xlsx"
 }
-# Для RAG мы умеем читать только текст
+# Файлы, которые мы отправляем в Kafka на векторизацию
 RAG_EXTENSIONS = {".pdf", ".doc", ".docx"}
 
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = 100 * 1024 * 1024  # Увеличили до 100 MB (для больших PDF)
 
 # Папка для файлов
 UPLOAD_DIR = settings.UPLOAD_DIR
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# --- Вспомогательная функция для фона ---
-async def run_processing_bg(file_path: str, doc_id: int):
-    """
-    Создает новую сессию БД и запускает обработку документа.
-    """
-    async with SessionLocal() as db:
-        await process_document(db, file_path, doc_id)
 
 
 # -------------------------------
@@ -66,7 +55,6 @@ async def list_documents(
 # -------------------------------
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
-    background_tasks: BackgroundTasks, # <-- Добавлено для фона
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
@@ -76,7 +64,7 @@ async def upload_document(
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="Файл не передан")
 
-    # расширение
+    # Проверка расширения
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -87,7 +75,7 @@ async def upload_document(
             ),
         )
 
-    # читаем файл целиком
+    # Чтение файла
     content = await file.read()
     size = len(content)
 
@@ -100,7 +88,7 @@ async def upload_document(
             ),
         )
 
-    # --- парсинг тегов ---
+    # Парсинг тегов
     tag_list: List[str] = []
     if tags:
         try:
@@ -108,20 +96,17 @@ async def upload_document(
             if isinstance(parsed, list):
                 tag_list = [str(x) for x in parsed]
         except Exception:
-            pass  # некорректный JSON — игнорируем
+            pass
 
-    # --- формируем имя файла ---
+    # Сохранение файла на диск
     unique_name = f"{uuid.uuid4()}{file_ext}"
     save_path = UPLOAD_DIR / unique_name
     save_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # -----------------------------
-    # 🟢 АСИНХРОННАЯ ЗАПИСЬ ФАЙЛА
-    # -----------------------------
     async with aiofiles.open(save_path, "wb") as f:
         await f.write(content)
 
-    # --- сохраняем в БД ---
+    # Сохранение метаданных в БД
     doc = Document(
         title=title or file.filename,
         description=description,
@@ -136,11 +121,20 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
-    # --- ЗАПУСК RAG ИНДЕКСАЦИИ ---
-    # Если файл текстовый (pdf/doc), отправляем на индексацию
+    # --- АСИНХРОННАЯ ОТПРАВКА В KAFKA ---
+    # Мы не обрабатываем файл здесь, чтобы не блокировать API.
+    # Мы просто говорим: "Файл загружен, ID такой-то".
     if file_ext in RAG_EXTENSIONS:
-        background_tasks.add_task(run_processing_bg, str(save_path), doc.id)
-    # -----------------------------
+        await KafkaProducerService.send_event(
+            topic=settings.KAFKA_TOPIC_DOCS,
+            event_type="document_uploaded",
+            data={
+                "doc_id": doc.id,
+                "file_path": str(save_path),
+                "original_name": doc.original_name
+            }
+        )
+    # -------------------------------------
 
     return doc
 
@@ -187,8 +181,6 @@ async def delete_document(
         except Exception as e:
             print(f"ERROR: could not delete file {file_path}: {e}")
 
-    # Postgres CASCADE (который мы настроили в models.py)
-    # автоматически удалит все vector-чанки, связанные с этим документом.
     await db.delete(doc)
     await db.commit()
     return None

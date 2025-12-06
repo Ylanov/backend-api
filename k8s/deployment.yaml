@@ -7,14 +7,10 @@ metadata:
     app: pyro-api
 spec:
   replicas: 2
-
-  # --- ВАЖНОЕ ДОБАВЛЕНИЕ ---
-  # Recreate убивает старые поды перед созданием новых.
-  # Это предотвращает переполнение памяти (OOM) при обновлении.
+  # Оставляем Recreate, чтобы при обновлении старые поды убивались сразу,
+  # освобождая место для новых (важно при больших лимитах памяти).
   strategy:
     type: Recreate
-  # -------------------------
-
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -37,8 +33,7 @@ spec:
 
       containers:
         - name: pyro-api
-          # Используем версию с библиотеками AI
-          image: ghcr.io/ylanov/pyro-api:2.0.708
+          image: ghcr.io/ylanov/pyro-api:2.0.711
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -55,13 +50,13 @@ spec:
                 name: pyro-api-env-secrets
 
           env:
-            # --- СУЩЕСТВУЮЩИЕ ПЕРЕМЕННЫЕ ---
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: pyro-api-env-secrets
                   key: SECRET_KEY
 
+            # ПЕРЕМЕННЫЕ БД
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
@@ -87,11 +82,14 @@ spec:
                 secretKeyRef:
                   name: pyro-db-app
                   key: dbname
-
             - name: DATABASE_URL
               value: "postgresql+asyncpg://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
 
-            # --- ПЕРЕМЕННЫЕ ДЛЯ GIGACHAT ---
+            # KAFKA
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-0.kafka-svc.default.svc.cluster.local:9092"
+
+            # AI & RAG
             - name: GIGACHAT_CREDENTIALS
               valueFrom:
                 secretKeyRef:
@@ -102,8 +100,6 @@ spec:
                 secretKeyRef:
                   name: gigachat-secrets
                   key: GIGACHAT_VERIFY_SSL
-
-            # --- ПЕРЕМЕННЫЕ ДЛЯ КЭША МОДЕЛЕЙ (в /tmp) ---
             - name: HF_HOME
               value: "/tmp/huggingface"
             - name: SENTENCE_TRANSFORMERS_HOME
@@ -114,7 +110,6 @@ spec:
           volumeMounts:
             - name: uploads-storage
               mountPath: /uploads
-            # Монтируем временную папку для записи моделей
             - name: tmp-storage
               mountPath: /tmp
 
@@ -131,20 +126,20 @@ spec:
             httpGet:
               path: /api/healthz
               port: 8000
-            # 15 минут на скачивание и старт модели
             initialDelaySeconds: 1500
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
 
+          # --- ОБНОВЛЕННЫЕ РЕСУРСЫ ---
           resources:
             requests:
-              cpu: "500m"
-              memory: "1Gi"
+              cpu: "1"         # Гарантируем 1 ядро (было 0.5)
+              memory: "4Gi"    # Гарантируем 4 ГБ RAM (было 1)
             limits:
-              cpu: "2"
-              # 4GB памяти для работы AI
-              memory: "4Gi"
+              cpu: "4"         # Разрешаем брать до 4 ядер в пике (было 2)
+              memory: "8Gi"    # Разрешаем брать до 8 ГБ RAM (было 4)
+          # ---------------------------
 
       volumes:
         - name: uploads-storage

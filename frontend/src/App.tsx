@@ -25,6 +25,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import LogoutIcon from "@mui/icons-material/Logout";
+import SchoolIcon from "@mui/icons-material/School"; // <--- 1. Добавлен импорт иконки
 
 import StaffAndStructurePage from "./pages/StaffAndStructurePage";
 import ZonesPage from "./pages/ZonesPage";
@@ -41,7 +42,7 @@ import AdminLogsPage from "./pages/AdminLogsPage";
 import { RequireAuth, useAuth } from "./auth/AuthProvider";
 import Sidebar from "./components/Sidebar";
 import NotificationsPopover from "./components/NotificationsPopover";
-import AssistantChat from "./components/AssistantChat"; // <-- НОВЫЙ ИМПОРТ
+import AssistantChat from "./components/AssistantChat";
 
 import { useQuery } from "@tanstack/react-query";
 import { fetchNotifications } from "./services/api";
@@ -233,6 +234,21 @@ export default function App() {
               )}
             </>
           )}
+
+          {/* --- 2. Добавлена кнопка перехода в LearnHouse --- */}
+          <Tooltip title="Обучающая платформа">
+            <IconButton
+              color="inherit"
+              component="a"
+              href="https://learn.pyro.asy-tk.ru"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ marginRight: 1 }}
+            >
+              <SchoolIcon />
+            </IconButton>
+          </Tooltip>
+          {/* ------------------------------------------------- */}
 
           <NotificationsWidget onOpen={handleOpenPopover} />
 

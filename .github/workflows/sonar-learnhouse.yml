@@ -1,0 +1,74 @@
+name: Sonar • learnhouse
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "learnhouse-build/**"
+      - ".github/workflows/sonar-learnhouse.yml"
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - "learnhouse-build/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonar-learnhouse:
+    runs-on: ubuntu-latest
+
+    # Все shell-команды по умолчанию выполняем из папки learnhouse-build
+    defaults:
+      run:
+        working-directory: learnhouse-build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Для SonarQube важна полная история (blame, новые строки и т.п.)
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: "learnhouse-build/pnpm-lock.yaml"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      # Если нужно — можно добавить build, но для анализа Sonar обязателен только исходный код
+      - name: Lint (turbo run lint)
+        run: pnpm lint
+
+      # Здесь запускается анализ SonarQube
+      - name: SonarQube Scan (learnhouse)
+        uses: SonarSource/sonarqube-scan-action@v2
+        with:
+          # Говорим сканеру, что проект лежит в папке learnhouse-build
+          projectBaseDir: learnhouse-build
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: Quality Gate (fail on red)
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        with:
+          # Путь до отчёта сканера — по аналогии с твоим фронтом, только папка другая
+          scanMetadataReportFile: learnhouse-build/.scannerwork/report-task.txt
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
