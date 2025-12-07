@@ -7,7 +7,16 @@ from pathlib import Path
 from typing import List, Optional
 
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    status,
+    UploadFile,
+    File,
+    Form,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +64,7 @@ async def list_documents(
 # -------------------------------
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
@@ -125,14 +135,15 @@ async def upload_document(
     # Мы не обрабатываем файл здесь, чтобы не блокировать API.
     # Мы просто говорим: "Файл загружен, ID такой-то".
     if file_ext in RAG_EXTENSIONS:
-        await KafkaProducerService.send_event(
-            topic=settings.KAFKA_TOPIC_DOCS,
-            event_type="document_uploaded",
-            data={
+        background_tasks.add_task(
+            KafkaProducerService.send_event,
+            settings.KAFKA_TOPIC_DOCS,
+            "document_uploaded",
+            {
                 "doc_id": doc.id,
                 "file_path": str(save_path),
-                "original_name": doc.original_name
-            }
+                "original_name": doc.original_name,
+            },
         )
     # -------------------------------------
 

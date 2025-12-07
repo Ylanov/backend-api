@@ -29,3 +29,4 @@ tiktoken
 langchain-huggingface
 docx2txt
 aiokafka==0.10.0
+aiosqlite

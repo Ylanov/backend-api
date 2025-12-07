@@ -26,31 +26,40 @@ logger = logging.getLogger(__name__)
 
 # --- ИНИЦИАЛИЗАЦИЯ (Heavy Models) ---
 
-# 1. ThreadPool для тяжелых вычислений (чтобы не блокировать API)
-# Используем кол-во воркеров = кол-ву ядер CPU (примерно)
-cpu_executor = ThreadPoolExecutor(max_workers=4)
+RAG_ENABLED = settings.ENABLE_RAG
 
-logger.info("Loading Embedding model...")
-embeddings_model = HuggingFaceEmbeddings(
-    model_name=settings.EMBEDDING_MODEL_NAME,
-    encode_kwargs={'normalize_embeddings': True}
-)
+if RAG_ENABLED:
+    # 1. ThreadPool для тяжелых вычислений (чтобы не блокировать API)
+    cpu_executor = ThreadPoolExecutor(max_workers=4)
 
-logger.info("Loading Reranker model...")
-# CrossEncoder загружаем на CPU, он отрабатывает быстро
-reranker_model = CrossEncoder(settings.RERANKER_MODEL_NAME, max_length=512)
+    logger.info("Loading Embedding model...")
+    embeddings_model = HuggingFaceEmbeddings(
+        model_name=settings.EMBEDDING_MODEL_NAME,
+        encode_kwargs={'normalize_embeddings': True}
+    )
 
-# Клиент Redis
-redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    logger.info("Loading Reranker model...")
+    # CrossEncoder загружаем на CPU, он отрабатывает быстро
+    reranker_model = CrossEncoder(settings.RERANKER_MODEL_NAME, max_length=512)
 
-# GigaChat
-chat = GigaChat(
-    credentials=settings.GIGACHAT_CREDENTIALS,
-    verify_ssl_certs=settings.GIGACHAT_VERIFY_SSL,
-    scope=settings.GIGACHAT_SCOPE,
-    model="GigaChat",
-    temperature=0.4,  # Чуть строже для приказов
-)
+    # Клиент Redis
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+    # GigaChat
+    chat = GigaChat(
+        credentials=settings.GIGACHAT_CREDENTIALS,
+        verify_ssl_certs=settings.GIGACHAT_VERIFY_SSL,
+        scope=settings.GIGACHAT_SCOPE,
+        model="GigaChat",
+        temperature=0.4,  # Чуть строже для приказов
+    )
+else:
+    logger.info("RAG is disabled (ENABLE_RAG=false). Skipping heavy model initialization.")
+    cpu_executor = None
+    embeddings_model = None
+    reranker_model = None
+    redis_client = None
+    chat = None
 
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
@@ -60,6 +69,8 @@ async def get_embedding_async(text: str) -> List[float]:
     Асинхронная обертка над синхронной моделью.
     Не блокирует Event Loop FastAPI.
     """
+    if not RAG_ENABLED or embeddings_model is None:
+        raise RuntimeError("RAG functionality is disabled (ENABLE_RAG=false)")
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(cpu_executor, embeddings_model.embed_query, text)
 
@@ -69,6 +80,8 @@ async def rerank_results(query: str, chunks: List[DocumentChunk], top_k: int = 5
     Переранжирование (Re-ranking).
     Сравнивает вопрос и тексты "в лоб" для максимальной точности.
     """
+    if not RAG_ENABLED or reranker_model is None:
+        raise RuntimeError("RAG functionality is disabled (ENABLE_RAG=false)")
     if not chunks:
         return []
 

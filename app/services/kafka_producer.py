@@ -13,6 +13,11 @@ class KafkaProducerService:
     @classmethod
     async def start(cls):
         """Запуск соединения с механизмом Retry"""
+        if not settings.ENABLE_KAFKA:
+            logger.info("Kafka producer is disabled (ENABLE_KAFKA=false). Skipping connection.")
+            cls._producer = None
+            return
+
         logger.info("Connecting to Kafka...")
 
         retries = 10  # Пытаться 10 раз
