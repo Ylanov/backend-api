@@ -54,10 +54,11 @@ async def list_pyrotechnicians(
 
 @router.post("", response_model=PyroOut, status_code=status.HTTP_201_CREATED)
 async def create_pyrotechnician(
-    payload: PyrotechnicianCreate,
-    db: AsyncSession = Depends(get_db),
-    current: Pyrotechnician = Depends(get_current_admin),
+        payload: PyrotechnicianCreate,
+        db: AsyncSession = Depends(get_db),
+        current: Pyrotechnician = Depends(get_current_admin),
 ):
+    # Проверка на существование имени
     q = select(Pyrotechnician).where(
         Pyrotechnician.full_name == payload.full_name
     )
@@ -66,8 +67,22 @@ async def create_pyrotechnician(
             status_code=409,
             detail=f"Pyrotechnician with name '{payload.full_name}' already exists",
         )
+    # 1. Получаем словарь данных
+    pyro_data = payload.model_dump()
 
-    entity = Pyrotechnician(**payload.model_dump())
+    # 2. Безопасно извлекаем пароль и удаляем ключ 'password' из словаря
+    raw_password = pyro_data.pop("password", None)
+
+    # 3. Хешируем, ТОЛЬКО если пароль был передан (не None и не пустая строка)
+    if raw_password:
+        pyro_data["password_hash"] = get_password_hash(raw_password)
+
+    # 4. Создаем сущность
+    # Если пароля не было, password_hash останется None
+    entity = Pyrotechnician(**pyro_data)
+
+    # -------------------
+
     db.add(entity)
     await db.commit()
     await db.refresh(entity)

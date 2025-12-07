@@ -16,15 +16,16 @@ aiofiles
 pytest
 # БД
 pgvector>=0.2.0
+redis
 
 # AI и RAG
 langchain>=0.1.0
 langchain-community>=0.0.10
-langchain-gigachat  # Библиотека для работы с GigaChat
-sentence-transformers # Для локальных эмбеддингов HuggingFace
-pypdf # Для чтения PDF
-python-docx # Для чтения DOCX
-tiktoken # Токенизатор
+langchain-gigachat
+sentence-transformers
+pypdf
+python-docx
+tiktoken
 langchain-huggingface
 docx2txt
 aiokafka==0.10.0

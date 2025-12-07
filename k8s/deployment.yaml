@@ -7,8 +7,6 @@ metadata:
     app: pyro-api
 spec:
   replicas: 2
-  # Оставляем Recreate, чтобы при обновлении старые поды убивались сразу,
-  # освобождая место для новых (важно при больших лимитах памяти).
   strategy:
     type: Recreate
   revisionHistoryLimit: 3
@@ -33,7 +31,7 @@ spec:
 
       containers:
         - name: pyro-api
-          image: ghcr.io/ylanov/pyro-api:2.0.711
+          image: ghcr.io/ylanov/pyro-api:2.0.713
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -89,7 +87,7 @@ spec:
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "kafka-0.kafka-svc.default.svc.cluster.local:9092"
 
-            # AI & RAG
+            # AI & RAG (UPDATED)
             - name: GIGACHAT_CREDENTIALS
               valueFrom:
                 secretKeyRef:
@@ -100,6 +98,14 @@ spec:
                 secretKeyRef:
                   name: gigachat-secrets
                   key: GIGACHAT_VERIFY_SSL
+
+            # --- НОВЫЕ ПЕРЕМЕННЫЕ ---
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"  # Имя сервиса 'redis', порт 6379
+            - name: RERANKER_MODEL_NAME
+              value: "BAAI/bge-reranker-v2-m3"
+            # ------------------------
+
             - name: HF_HOME
               value: "/tmp/huggingface"
             - name: SENTENCE_TRANSFORMERS_HOME
@@ -117,7 +123,7 @@ spec:
             httpGet:
               path: /api/healthz
               port: 8000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 1500
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
@@ -131,15 +137,13 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
 
-          # --- ОБНОВЛЕННЫЕ РЕСУРСЫ ---
           resources:
             requests:
-              cpu: "1"         # Гарантируем 1 ядро (было 0.5)
-              memory: "4Gi"    # Гарантируем 4 ГБ RAM (было 1)
+              cpu: "1"
+              memory: "4Gi"
             limits:
-              cpu: "4"         # Разрешаем брать до 4 ядер в пике (было 2)
-              memory: "8Gi"    # Разрешаем брать до 8 ГБ RAM (было 4)
-          # ---------------------------
+              cpu: "4"
+              memory: "8Gi"
 
       volumes:
         - name: uploads-storage

@@ -22,8 +22,7 @@ from pgvector.sqlalchemy import Vector
 # Берём Base из единого модуля database.py
 from .database import Base
 
-
-# --- КОНСТАНТЫ ДЛЯ FK, ON DELETE И CASCADE (убираем дубли строк) ---
+# --- КОНСТАНТЫ ДЛЯ FK, ON DELETE И CASCADE ---
 
 PYROTECHNICIAN_FK_TARGET = "pyrotechnicians.id"
 ONDELETE_SET_NULL = "SET NULL"
@@ -105,7 +104,6 @@ class Pyrotechnician(Base):
     rank = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=True)
 
-    # --- Поля для безопасности и управления доступом ---
     is_active = Column(
         Boolean,
         nullable=False,
@@ -127,7 +125,6 @@ class Pyrotechnician(Base):
         server_default="1",
     )
 
-    # --- НОВОЕ ПОЛЕ: Требуется ли смена пароля при первом входе ---
     must_change_password = Column(
         Boolean,
         nullable=False,
@@ -135,7 +132,6 @@ class Pyrotechnician(Base):
         server_default="false",
     )
 
-    # --- Поля для контроля входов ---
     last_login_at = Column(DateTime(timezone=True), nullable=True, index=True)
     login_count = Column(
         Integer,
@@ -440,6 +436,10 @@ class DocumentChunk(Base):
     )
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
+
+    # --- НОВОЕ ПОЛЕ: Номер страницы ---
+    page_number = Column(Integer, nullable=True)
+    # ----------------------------------
 
     # Вектор (1024 соответствует модели intfloat/multilingual-e5-large)
     embedding = Column(Vector(1024))

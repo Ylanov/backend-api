@@ -34,7 +34,7 @@ class Settings(BaseSettings):
         env="CORS_ALLOW_HEADERS",
     )
 
-    # --- НОВЫЕ НАСТРОЙКИ ДЛЯ AI (GigaChat + RAG) ---
+    # --- НАСТРОЙКИ ДЛЯ AI (GigaChat + RAG) ---
 
     # Ключ авторизации GigaChat
     GIGACHAT_CREDENTIALS: str = Field(..., env="GIGACHAT_CREDENTIALS")
@@ -45,13 +45,17 @@ class Settings(BaseSettings):
     # Область видимости
     GIGACHAT_SCOPE: str = Field("GIGACHAT_API_PERS", env="GIGACHAT_SCOPE")
 
-    # Название модели для эмбеддингов (локальная модель HuggingFace)
+    # Название модели для эмбеддингов
     EMBEDDING_MODEL_NAME: str = Field("intfloat/multilingual-e5-large", env="EMBEDDING_MODEL_NAME")
+
+    # --- НОВЫЕ НАСТРОЙКИ (REDIS + RERANKER) ---
+    REDIS_URL: str = Field("redis://localhost:6379/0", env="REDIS_URL")
+    RERANKER_MODEL_NAME: str = Field("BAAI/bge-reranker-v2-m3", env="RERANKER_MODEL_NAME")
 
     # --- KAFKA SETTINGS ---
     KAFKA_BOOTSTRAP_SERVERS: str = "kafka-svc:9092"
     KAFKA_TOPIC_TASKS: str = "pyro.tasks.events"
-    KAFKA_TOPIC_DOCS: str = "pyro.documents.events"  # <-- НОВЫЙ ТОПИК ДЛЯ ДОКУМЕНТОВ
+    KAFKA_TOPIC_DOCS: str = "pyro.documents.events"
 
     @field_validator(
         "BACKEND_CORS_ORIGINS",
