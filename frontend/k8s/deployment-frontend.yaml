@@ -21,7 +21,7 @@ spec:
 
       containers:
         - name: pyro-frontend
-          image: ghcr.io/ylanov/pyro-frontend:2.0.704-f
+          image: ghcr.io/ylanov/pyro-frontend:2.0.718-f
           imagePullPolicy: IfNotPresent
 
           ports:

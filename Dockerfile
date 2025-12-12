@@ -1,6 +1,5 @@
 # --------------------------------------------------------------------
 # ЭТАП 1: Сборщик (Builder)
-# Здесь мы компилируем библиотеки и скачиваем зависимости
 # --------------------------------------------------------------------
 FROM python:3.12-slim as builder
 
@@ -10,39 +9,33 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Устанавливаем системные пакеты, нужные ТОЛЬКО для сборки (компиляторы)
+# Устанавливаем системные пакеты для сборки (компиляторы + библиотеки для Postgres)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Создаем виртуальное окружение (чтобы потом легко скопировать его целиком)
+# Создаем виртуальное окружение
 RUN python -m venv /opt/venv
-# Активируем его для следующих команд
+# Активируем его
 ENV PATH="/opt/venv/bin:$PATH"
 
-# !!! САМЫЙ ВАЖНЫЙ ШАГ !!!
-# Сначала явно устанавливаем PyTorch для CPU.
-# Если этого не сделать, requirements.txt скачает тяжелую версию с CUDA (для видеокарт).
-# Это экономит ~3-4 ГБ места.
-RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-# Теперь устанавливаем остальные зависимости из файла
+# Устанавливаем зависимости
+# PyTorch УБРАН, так как мы используем внешний RAG (Dify)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # --------------------------------------------------------------------
 # ЭТАП 2: Финальный образ (Runtime)
-# Легкий образ, куда копируем только готовый результат
 # --------------------------------------------------------------------
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Устанавливаем только то, что нужно для ЗАПУСКА
-# libpq5 - нужна для работы с Postgres (psycopg2/asyncpg)
-# curl - нужен для Healthcheck в Kubernetes
+# Устанавливаем runtime-библиотеки
+# libpq5 - для Postgres
+# curl - для Healthcheck в Kubernetes
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libpq5 \
@@ -52,11 +45,14 @@ RUN apt-get update && \
 # Копируем подготовленное виртуальное окружение из этапа builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Добавляем venv в PATH, чтобы python и uvicorn вызывались из него
+# Добавляем venv в PATH
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Копируем весь код проекта
+# Копируем код проекта
 COPY . .
+
+# Создаем папку для загрузок, чтобы избежать ошибок прав доступа
+RUN mkdir -p /uploads
 
 # Настройки запуска
 ENV UVICORN_HOST=0.0.0.0
@@ -64,4 +60,5 @@ ENV UVICORN_PORT=8000
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Запускаем миграции БД, а затем само приложение
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -1,4 +1,3 @@
-// frontend/src/components/AssistantChat.tsx
 import { useState, useRef, useEffect } from "react";
 import {
   Box,
@@ -9,7 +8,6 @@ import {
   Stack,
   Avatar,
   Fab,
-  CircularProgress,
   Tooltip,
   Chip,
   Collapse,
@@ -19,16 +17,17 @@ import {
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import SendIcon from "@mui/icons-material/Send";
 import CloseIcon from "@mui/icons-material/Close";
-import PersonIcon from "@mui/icons-material/Person";
 import DescriptionIcon from "@mui/icons-material/Description";
+import StopCircleIcon from "@mui/icons-material/StopCircle";
 
-import { useMutation } from "@tanstack/react-query";
-import { askAssistant, getDocumentDownloadUrl } from "../services/api";
+// Импортируем утилиты из вашего api.ts
+import { getDocumentDownloadUrl, getStoredToken } from "../services/api";
 import type { ChatMessage } from "../types";
 
 export default function AssistantChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -41,50 +40,173 @@ export default function AssistantChat() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Автопрокрутка вниз при новом сообщении
+  // Автопрокрутка вниз при изменении сообщений
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   useEffect(() => {
     if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      scrollToBottom();
     }
   }, [messages, isOpen]);
 
-  const mutation = useMutation({
-    mutationFn: (question: string) => askAssistant(question),
-    onSuccess: (data) => {
-      const assistantMsg: ChatMessage = {
-        id: Date.now().toString(),
-        role: "assistant",
-        text: data.answer,
-        sources: data.sources,
-        createdAt: new Date(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    },
-    onError: () => {
-      const errorMsg: ChatMessage = {
-        id: Date.now().toString(),
-        role: "assistant",
-        text: "Извините, произошла ошибка при обращении к серверу. Попробуйте позже.",
-        createdAt: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    },
-  });
+  // --- ЛОГИКА ОТПРАВКИ И СТРИМИНГА ---
+  const handleSend = async () => {
+    if (!input.trim() || isStreaming) return;
 
-  const handleSend = () => {
-    if (!input.trim() || mutation.isPending) return;
+    const userText = input;
+    setInput("");
+    setIsStreaming(true);
 
+    // 1. Добавляем сообщение пользователя
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: "user",
-      text: input,
+      text: userText,
       createdAt: new Date(),
     };
-
     setMessages((prev) => [...prev, userMsg]);
-    mutation.mutate(input);
-    setInput("");
+
+    // 2. Добавляем сообщение ассистента (пока пустое)
+    const assistantMsgId = (Date.now() + 1).toString();
+    const assistantMsg: ChatMessage = {
+      id: assistantMsgId,
+      role: "assistant",
+      text: "",
+      createdAt: new Date(),
+    };
+    setMessages((prev) => [...prev, assistantMsg]);
+
+    // 3. Создаем контроллер для возможности отмены
+    abortControllerRef.current = new AbortController();
+
+    try {
+      // Получаем токен через утилиту
+      const token = getStoredToken();
+
+      if (!token) {
+        throw new Error("Вы не авторизованы. Пожалуйста, войдите в систему.");
+      }
+
+      // 4. Выполняем запрос с поддержкой стриминга
+      const response = await fetch("/api/assistant/ask", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ question: userText }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка сервера: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error("Сервер не вернул тело ответа.");
+      }
+
+      // 5. Читаем поток (ReadableStream)
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let done = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+
+        if (value) {
+          const chunkText = decoder.decode(value, { stream: true });
+          const lines = chunkText.split("\n");
+
+          for (const line of lines) {
+            // Разбираем SSE формат "data: ..."
+            if (line.startsWith("data: ")) {
+              const content = line.slice(6); // Убираем префикс "data: "
+
+              // --- ПРОВЕРКА НА ИСТОЧНИКИ (CITATIONS) ---
+              if (content.includes("__SOURCES__:")) {
+                const parts = content.split("__SOURCES__:");
+                const textPart = parts[0]; // Если вдруг текст прилип к маркеру
+                const sourcesPart = parts[1];
+
+                // Если есть остаток текста, сначала дописываем его
+                if (textPart) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMsgId
+                        ? { ...msg, text: msg.text + textPart }
+                        : msg
+                    )
+                  );
+                }
+
+                // Парсим JSON источников
+                try {
+                  const sources = JSON.parse(sourcesPart);
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMsgId
+                        ? { ...msg, sources: sources } // Обновляем поле sources
+                        : msg
+                    )
+                  );
+                } catch (e) {
+                  console.error("Ошибка парсинга источников:", e);
+                }
+              } else {
+                // --- ОБЫЧНЫЙ ТЕКСТ ---
+                // Просто дописываем к текущему сообщению
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, text: msg.text + content }
+                      : msg
+                  )
+                );
+              }
+            } else if (line.trim() !== "" && !line.startsWith("data:")) {
+                // Если бэкенд вдруг отправил строку без префикса (редкий случай)
+                // Можно раскомментировать, если текст теряется, но обычно не нужно.
+                // console.log("Unparsed line:", line);
+            }
+          }
+        }
+      }
+
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        console.log("Генерация остановлена пользователем");
+      } else {
+        console.error("Ошибка стриминга:", error);
+        // Записываем ошибку в сообщение ассистента
+        setMessages((prev) => {
+          return prev.map((msg) => {
+            if (msg.id === assistantMsgId) {
+              const errorText = msg.text
+                ? msg.text + "\n\n[Соединение прервано]"
+                : "Извините, произошла ошибка при получении ответа.";
+              return { ...msg, text: errorText };
+            }
+            return msg;
+          });
+        });
+      }
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsStreaming(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -162,7 +284,7 @@ export default function AssistantChat() {
                   Помощник
                 </Typography>
                 <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                  GigaChat Pro
+                  Dify AI (RAG)
                 </Typography>
               </Box>
             </Stack>
@@ -171,7 +293,7 @@ export default function AssistantChat() {
             </IconButton>
           </Box>
 
-          {/* Сообщения */}
+          {/* Область сообщений */}
           <Box
             sx={{
               flexGrow: 1,
@@ -221,19 +343,26 @@ export default function AssistantChat() {
                         boxShadow: isUser ? 2 : 1,
                       }}
                     >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-word",
-                          fontSize: "0.9rem",
-                        }}
-                      >
-                        {msg.text}
-                      </Typography>
+                      {/* Индикатор печати, если сообщение пустое и идет стрим */}
+                      {!msg.text && !isUser && isStreaming && msg.id === messages[messages.length - 1].id ? (
+                        <Typography variant="body2" sx={{ fontStyle: "italic", opacity: 0.7 }}>
+                          Печатает...
+                        </Typography>
+                      ) : (
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          {msg.text}
+                        </Typography>
+                      )}
                     </Paper>
 
-                    {/* Источники */}
+                    {/* Отображение источников */}
                     {!isUser && msg.sources && msg.sources.length > 0 && (
                       <Box sx={{ mt: 1, ml: 1 }}>
                         <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
@@ -250,7 +379,9 @@ export default function AssistantChat() {
                               color="default"
                               component="a"
                               clickable
-                              href={getDocumentDownloadUrl(src.doc_id)}
+                              // Если doc_id есть (файл в нашей БД), то даем ссылку на скачивание.
+                              // Если нет (удален локально, но есть в Dify), ссылка не сработает или можно скрыть.
+                              href={src.doc_id ? getDocumentDownloadUrl(src.doc_id) : undefined}
                               target="_blank"
                               sx={{
                                 maxWidth: "100%",
@@ -258,6 +389,7 @@ export default function AssistantChat() {
                                 fontSize: "0.75rem",
                                 height: 24,
                                 "& .MuiChip-label": { px: 1 },
+                                cursor: src.doc_id ? "pointer" : "default",
                               }}
                             />
                           ))}
@@ -269,23 +401,11 @@ export default function AssistantChat() {
               );
             })}
 
-            {mutation.isPending && (
-              <Box sx={{ display: "flex", justifyContent: "flex-start", ml: 4.5 }}>
-                <Paper sx={{ p: 1.5, bgcolor: "white", borderRadius: 2, minWidth: 60 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <CircularProgress size={14} />
-                    <Typography variant="caption" color="text.secondary">
-                      Печатает...
-                    </Typography>
-                  </Stack>
-                </Paper>
-              </Box>
-            )}
-
+            {/* Невидимый элемент для скролла */}
             <div ref={messagesEndRef} />
           </Box>
 
-          {/* Ввод текста */}
+          {/* Область ввода */}
           <Box sx={{ p: 1.5, bgcolor: "white", borderTop: "1px solid", borderColor: "divider" }}>
             <Stack direction="row" spacing={1} alignItems="flex-end">
               <TextField
@@ -295,7 +415,7 @@ export default function AssistantChat() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                disabled={mutation.isPending}
+                disabled={isStreaming}
                 multiline
                 maxRows={4}
                 sx={{
@@ -305,22 +425,32 @@ export default function AssistantChat() {
                   },
                 }}
               />
-              <IconButton
-                color="primary"
-                onClick={handleSend}
-                disabled={!input.trim() || mutation.isPending}
-                sx={{
-                  bgcolor: input.trim() ? "primary.main" : "transparent",
-                  color: input.trim() ? "white" : "primary.main",
-                  "&:hover": {
-                    bgcolor: input.trim() ? "primary.dark" : "rgba(25, 118, 210, 0.04)",
-                  },
-                  width: 40,
-                  height: 40,
-                }}
-              >
-                <SendIcon fontSize="small" />
-              </IconButton>
+              {isStreaming ? (
+                <IconButton
+                  color="error"
+                  onClick={handleStop}
+                  sx={{ width: 40, height: 40 }}
+                >
+                  <StopCircleIcon />
+                </IconButton>
+              ) : (
+                <IconButton
+                  color="primary"
+                  onClick={handleSend}
+                  disabled={!input.trim()}
+                  sx={{
+                    bgcolor: input.trim() ? "primary.main" : "transparent",
+                    color: input.trim() ? "white" : "primary.main",
+                    "&:hover": {
+                      bgcolor: input.trim() ? "primary.dark" : "rgba(25, 118, 210, 0.04)",
+                    },
+                    width: 40,
+                    height: 40,
+                  }}
+                >
+                  <SendIcon fontSize="small" />
+                </IconButton>
+              )}
             </Stack>
             <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 1, fontSize: "0.7rem" }}>
               Может допускать ошибки. Проверяйте информацию в источниках.

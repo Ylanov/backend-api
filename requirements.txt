@@ -1,31 +1,17 @@
 fastapi
 uvicorn[standard]
-SQLAlchemy[asyncio]
-asyncpg
 pydantic
-geoalchemy2
-alembic
-psycopg2-binary
+pydantic-settings
 python-multipart
+SQLAlchemy[asyncio]
+alembic
+asyncpg
+psycopg2-binary
+geoalchemy2
 python-jose[cryptography]
 passlib[bcrypt]
-pydantic-settings
-prometheus-fastapi-instrumentator
 httpx
 aiofiles
-pytest
-# БД
-pgvector>=0.2.0
-redis
-
-# AI и RAG
-langchain>=0.1.0
-langchain-community>=0.0.10
-langchain-gigachat
-sentence-transformers
-pypdf
-python-docx
-tiktoken
-langchain-huggingface
-docx2txt
 aiokafka==0.10.0
+# ИСПРАВЛЕНО НАЗВАНИЕ (добавлено 'or' в конце)
+prometheus-fastapi-instrumentator

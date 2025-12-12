@@ -1,4 +1,3 @@
-// frontend/src/pages/DocumentsPage.tsx
 import { useRef } from "react";
 import {
   Box,
@@ -28,7 +27,13 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 
-import { fetchDocuments, uploadDocument, deleteDocument } from "../services/api";
+// Добавлен импорт getDocumentDownloadUrl
+import {
+  fetchDocuments,
+  uploadDocument,
+  deleteDocument,
+  getDocumentDownloadUrl
+} from "../services/api";
 import type { Document } from "../types";
 import { useNotification } from "../notifications/NotificationProvider";
 import PageHeader from "../components/PageHeader";
@@ -188,7 +193,8 @@ export default function DocumentsPage() {
                         <Tooltip title="Скачать">
                           <IconButton
                             component={Link}
-                            href={doc.download_url}
+                            // Используем функцию из api.ts для формирования ссылки
+                            href={getDocumentDownloadUrl(doc.id)}
                             target="_blank"
                             rel="noopener noreferrer"
                             color="primary"

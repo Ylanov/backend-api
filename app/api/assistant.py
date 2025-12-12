@@ -1,86 +1,75 @@
 # app/api/assistant.py
 from __future__ import annotations
-from typing import List, Optional
+
+from typing import Optional, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.database import get_db
+from app.models import Pyrotechnician
 from app.security import get_current_pyro
-from app.models import Pyrotechnician, Document
-from app.services.rag import (
-    search_related_chunks,
-    generate_answer_stream,
-    get_cached_answer,
-    set_cached_answer
+from app.services.rag import generate_answer_stream
+
+router = APIRouter(
+    prefix="/assistant",
+    tags=["assistant"],
 )
-
-router = APIRouter(prefix="/assistant", tags=["assistant"])
-
-
-class SourceItem(BaseModel):
-    title: str
-    doc_id: int
-    page: Optional[int] = None
 
 
 class QueryRequest(BaseModel):
+    """
+    Запрос от фронта к ассистенту.
+    """
     question: str
+    conversation_id: Optional[str] = None
 
 
-@router.post("/ask") # <-- ИЗМЕНЕНИЕ ЗДЕСЬ: /ask_stream -> /ask
+@router.post("/ask")
 async def ask_assistant_stream(
-        payload: QueryRequest,
-        db: AsyncSession = Depends(get_db),
-        current_pyro: Pyrotechnician = Depends(get_current_pyro),
+    payload: QueryRequest,
+    current_pyro: Pyrotechnician = Depends(get_current_pyro),
 ):
-    question = payload.question.strip()
+    """
+    Эндпоинт для общения фронта с ИИ через Dify.
+
+    Логика:
+    1. Принимаем вопрос от авторизованного пользователя.
+    2. Открываем стриминговое соединение с Dify через app.services.rag.
+    3. Транслируем (проксируем) полученные чанки текста обратно на фронт в реальном времени.
+    """
+    question = (payload.question or "").strip()
     if not question:
-        raise HTTPException(status_code=400, detail="Empty question")
+        raise HTTPException(status_code=400, detail="Вопрос не может быть пустым.")
 
-    # 1. Проверяем кеш (мгновенный ответ)
-    cached = await get_cached_answer(question)
-    if cached:
-        async def fake_stream():
-            yield cached
+    user_id = str(current_pyro.id)
+    conversation_id = payload.conversation_id
 
-        return StreamingResponse(fake_stream(), media_type="text/event-stream")
+    async def event_stream() -> AsyncIterator[str]:
+        # generate_answer_stream теперь реально читает SSE поток от Dify
+        # и возвращает только текст ответа по мере его генерации.
+        async for chunk in generate_answer_stream(
+            question=question,
+            user_id=user_id,
+            conversation_id=conversation_id,
+        ):
+            # ВАЖНО: Оборачиваем чанк в формат SSE (Server-Sent Events).
+            # Фронтенд ожидает строку, начинающуюся с "data: "
+            # JSON.dumps используется для безопасного экранирования переносов строк внутри чанка
+            import json
+            yield f"data: {chunk}\n\n"
 
-    # 2. Поиск
-    chunks = await search_related_chunks(db, question, limit=5)
+    # ВАЖНО: Заголовки, чтобы Nginx Proxy Manager НЕ буферизировал ответ,
+    # а отдавал его сразу по мере поступления.
+    headers = {
+        "X-Accel-Buffering": "no",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Content-Type": "text/event-stream",
+    }
 
-    if not chunks:
-        async def empty_stream():
-            yield "В базе знаний не найдено подходящей информации."
-
-        return StreamingResponse(empty_stream(), media_type="text/event-stream")
-
-    # 3. Формируем контекст с указанием страниц
-    context_parts = []
-
-    doc_ids = list({c.document_id for c in chunks})
-    docs_res = await db.execute(select(Document).where(Document.id.in_(doc_ids)))
-    docs_map = {d.id: d.title for d in docs_res.scalars().all()}
-
-    for c in chunks:
-        doc_title = docs_map.get(c.document_id, "Unknown Doc")
-        page_str = f" (стр. {c.page_number})" if c.page_number else ""
-        context_parts.append(f"Источник: {doc_title}{page_str}\nТекст: {c.content}")
-
-    full_context = "\n\n---\n\n".join(context_parts)
-
-    # 4. Стримим ответ и сохраняем в кеш
-    async def response_generator():
-        full_answer = ""
-        async for text_chunk in generate_answer_stream(full_context, question):
-            full_answer += text_chunk
-            yield text_chunk
-
-        # Кешируем ответ, если он не пустой
-        if len(full_answer) > 20:
-            await set_cached_answer(question, full_answer)
-
-    return StreamingResponse(response_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers=headers
+    )

@@ -18,6 +18,12 @@ spec:
       labels:
         app: pyro-api
     spec:
+      # Жесткая привязка домена к Proxy Manager (VM 3)
+      hostAliases:
+        - ip: "192.168.0.202"
+          hostnames:
+            - "rag.asy-tk.ru"
+
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -31,7 +37,8 @@ spec:
 
       containers:
         - name: pyro-api
-          image: ghcr.io/ylanov/pyro-api:2.0.713
+          # Всегда менять
+          image: ghcr.io/ylanov/pyro-api:2.0.721
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -54,7 +61,7 @@ spec:
                   name: pyro-api-env-secrets
                   key: SECRET_KEY
 
-            # ПЕРЕМЕННЫЕ БД
+            # --- База Данных ---
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
@@ -83,11 +90,11 @@ spec:
             - name: DATABASE_URL
               value: "postgresql+asyncpg://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
 
-            # KAFKA
+            # --- Kafka ---
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: "kafka-0.kafka-svc.default.svc.cluster.local:9092"
 
-            # AI & RAG (UPDATED)
+            # --- AI: GigaChat (Legacy/Direct) ---
             - name: GIGACHAT_CREDENTIALS
               valueFrom:
                 secretKeyRef:
@@ -99,13 +106,47 @@ spec:
                   name: gigachat-secrets
                   key: GIGACHAT_VERIFY_SSL
 
-            # --- НОВЫЕ ПЕРЕМЕННЫЕ ---
+            # --- AI: Dify (Чат + База знаний) ---
+            - name: DIFY_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dify-secrets
+                  key: DIFY_API_URL
+            - name: DIFY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dify-secrets
+                  key: DIFY_API_KEY
+            - name: DIFY_OUTPUT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dify-secrets
+                  key: DIFY_OUTPUT_KEY
+            - name: DIFY_TIMEOUT_SECONDS
+              valueFrom:
+                secretKeyRef:
+                  name: dify-secrets
+                  key: DIFY_TIMEOUT_SECONDS
+
+            # НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ ЗАГРУЗКИ ФАЙЛОВ
+            - name: DIFY_DATASET_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dify-secrets
+                  key: DIFY_DATASET_API_KEY
+            - name: DIFY_DATASET_ID
+              valueFrom:
+                secretKeyRef:
+                  name: dify-secrets
+                  key: DIFY_DATASET_ID
+
+            # --- AI: Вспомогательные сервисы ---
             - name: REDIS_URL
-              value: "redis://redis:6379/0"  # Имя сервиса 'redis', порт 6379
+              value: "redis://redis:6379/0"
             - name: RERANKER_MODEL_NAME
               value: "BAAI/bge-reranker-v2-m3"
-            # ------------------------
 
+            # --- Системные пути ---
             - name: HF_HOME
               value: "/tmp/huggingface"
             - name: SENTENCE_TRANSFORMERS_HOME
@@ -119,11 +160,19 @@ spec:
             - name: tmp-storage
               mountPath: /tmp
 
+          # --- ПРОБЫ (Health Checks) ---
+          startupProbe:
+            httpGet:
+              path: /api/healthz
+              port: 8000
+            failureThreshold: 30
+            periodSeconds: 10
+
           readinessProbe:
             httpGet:
               path: /api/healthz
               port: 8000
-            initialDelaySeconds: 1500
+            initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
@@ -132,7 +181,7 @@ spec:
             httpGet:
               path: /api/healthz
               port: 8000
-            initialDelaySeconds: 1500
+            initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
