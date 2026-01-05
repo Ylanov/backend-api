@@ -12,6 +12,6 @@ python-jose[cryptography]
 passlib[bcrypt]
 httpx
 aiofiles
-aiokafka==0.10.0
+aiokafka==0.13.0
 # ИСПРАВЛЕНО НАЗВАНИЕ (добавлено 'or' в конце)
 prometheus-fastapi-instrumentator
